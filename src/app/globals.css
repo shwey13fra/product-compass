@@ -1,0 +1,52 @@
+@import "tailwindcss";
+
+/*
+  Warm Clay design tokens (from CLAUDE.md).
+  Tailwind v4 generates utilities from these:
+    --color-primary       -> bg-primary / text-primary / border-primary
+    --color-surface-alt   -> bg-surface-alt
+    --font-heading        -> font-heading
+    --radius-card         -> rounded-card
+  Never hardcode hex in components — use these tokens.
+*/
+@theme {
+  /* surfaces & text */
+  --color-bg: #fbf7f2;
+  --color-surface: #ffffff;
+  --color-surface-alt: #f5eee6;
+  --color-border: #eadfd3;
+  --color-ink: #2a2320;
+  --color-muted: #7a6e64;
+
+  /* primary (terracotta) */
+  --color-primary: #d9603f;
+  --color-primary-hover: #c24e30;
+  --color-primary-soft: #f7e2d9;
+
+  /* semantic — each with a -soft tint */
+  --color-accent: #e8a13c; /* honey */
+  --color-accent-soft: #fbebd3;
+  --color-success: #5c8a5a; /* sage */
+  --color-success-soft: #dce8db;
+  --color-danger: #b5462f; /* brick */
+  --color-danger-soft: #f2d8d2;
+  --color-info: #5e7a8a; /* slate */
+  --color-info-soft: #d8e2e8;
+
+  /* fonts (wired in layout.tsx) */
+  --font-sans: var(--font-inter), ui-sans-serif, system-ui, sans-serif;
+  --font-heading: var(--font-jakarta), var(--font-inter), sans-serif;
+
+  /* radii: cards 14 / buttons 10 / chips full */
+  --radius-card: 14px;
+  --radius-btn: 10px;
+
+  /* soft warm shadow */
+  --shadow-warm: 0 1px 2px rgba(42, 35, 32, 0.04), 0 8px 24px rgba(42, 35, 32, 0.06);
+}
+
+body {
+  background-color: var(--color-bg);
+  color: var(--color-ink);
+  font-family: var(--font-sans);
+}

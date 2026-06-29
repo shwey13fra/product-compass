@@ -1,0 +1,12 @@
+# Past Mistakes — Product Compass
+
+> When something bites us, record the *class* of error and the pattern that prevents it.
+> Not the one-off bug — the lesson. Newest at top.
+
+- 2026-06-28 · **Tailwind v4 can't generate classes from interpolated strings** (`` `bg-${tone}-soft` ``, `` `text-${x}` ``). The JIT scans source for *complete* literal class names at build time; a runtime-built string isn't found, so the class never ships and the element renders unstyled — no error, just missing styles. *Pattern:* map a variant to a full static class string (`const TONE = { success: "bg-success-soft text-success", … }`) and interpolate the whole string, never a fragment. Caught in `FitReadView` before it shipped.
+
+- 2026-06-28 · **RLS-enabled table with no SELECT policy → anon reads return empty with NO error (silent "no data").** User inserted 50 rows via the SQL editor (service-role, bypasses RLS) but the app (anon key) kept showing "No roles yet". `select` returned `{ data: [], error: null }` — looks identical to a truly empty table. *Pattern:* when an anon query returns 0 rows + no error but you expect data, suspect a missing RLS SELECT policy before suspecting the insert. For shared/public tables add `create policy ... for select to anon using (true)` (see `scripts/roles-rls-policy.sql`); keep writes service-role only.
+
+- 2026-06-28 · **A "seeded" claim in the journal isn't proof — verify against the live DB.** Journal said 50 roles were seeded, but `select count(*)` on `roles` returned 0. The seed had never landed (or was run against a different project). Compounding it: RLS *is* enabled on `roles` (anon `SELECT` allowed, `INSERT` denied), so seeding via the anon key/app is impossible — `node` insert failed with "violates row-level security policy". *Pattern:* (1) verify data state with a real query before building on it; (2) seed shared/RLS-protected tables via a SQL file run in the Supabase SQL editor (service-role, bypasses RLS), never via the anon client. See `seed.sql` + `scripts/gen-seed-sql.mjs`.
+
+- 2026-06-27 · **Pasted env values that include extra path/suffix break the client.** Supabase URL was pasted as the REST endpoint (`…supabase.co/rest/v1/`) but `supabase-js` wants the bare project URL and appends `/rest/v1/` itself → doubled path, silent failures. *Pattern:* when a user pastes a connection value, sanity-check it against what the SDK expects (bare host, no trailing slash/path/quotes/whitespace) before trusting it.
