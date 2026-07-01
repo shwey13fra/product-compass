@@ -299,6 +299,10 @@ export async function adminCreateReferralRole(
       is_live: true,
       has_warm_path: true,
       freshness_checked_at: new Date().toISOString(),
+      // These are NOT NULL in the roles table (the seed always sets them); the
+      // admin form doesn't collect them, so supply sensible defaults.
+      real_pm_signals: [] as string[],
+      crowd_response_days: 7,
     })
     .select("id")
     .single();
