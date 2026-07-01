@@ -23,15 +23,22 @@ export function StatusStrip({
   status,
   busy,
   onChange,
+  allowed,
+  hint,
 }: {
   status: ApplicationStatus;
   busy: boolean;
   onChange: (next: ApplicationStatus) => void;
+  // If given, only these stages are settable by this viewer (others show but
+  // aren't clickable). Omit to allow all (the anonymous /tracking flow).
+  allowed?: ApplicationStatus[];
+  hint?: string;
 }) {
   const currentIdx = statusIndex(status);
+  const canSet = (s: ApplicationStatus) => !allowed || allowed.includes(s);
 
   function handleClick(next: ApplicationStatus) {
-    if (busy || next === status) return;
+    if (busy || next === status || !canSet(next)) return;
     if (next === "closed") {
       const ok = window.confirm(
         "Mark this application as Closed? You can still re-open it by picking another status."
@@ -48,14 +55,18 @@ export function StatusStrip({
           const stateKey =
             i < currentIdx ? "done" : i === currentIdx ? "current" : "todo";
           const isCurrent = i === currentIdx;
+          const settable = canSet(step.key) && !isCurrent;
           return (
             <li key={step.key} className="flex items-center gap-1.5">
               <button
                 type="button"
                 onClick={() => handleClick(step.key)}
-                disabled={busy}
+                disabled={busy || !settable}
                 aria-current={isCurrent ? "step" : undefined}
-                className={`inline-flex min-h-[36px] items-center gap-1.5 rounded-full px-3 py-1.5 text-xs font-semibold transition-colors disabled:cursor-not-allowed disabled:opacity-60 ${STEP_STATE[stateKey]}`}
+                title={
+                  !canSet(step.key) ? "The referrer updates this stage" : undefined
+                }
+                className={`inline-flex min-h-[36px] items-center gap-1.5 rounded-full px-3 py-1.5 text-xs font-semibold transition-colors ${STEP_STATE[stateKey]} ${busy ? "opacity-60" : ""} ${settable && !busy ? "cursor-pointer" : "cursor-default"}`}
               >
                 {i < currentIdx && <Check className="h-3.5 w-3.5" aria-hidden />}
                 {isCurrent && busy && (
@@ -73,7 +84,9 @@ export function StatusStrip({
           );
         })}
       </ol>
-      <p className="mt-2 text-xs text-muted">Tap a stage to update where this stands.</p>
+      <p className="mt-2 text-xs text-muted">
+        {hint ?? "Tap a stage to update where this stands."}
+      </p>
     </div>
   );
 }

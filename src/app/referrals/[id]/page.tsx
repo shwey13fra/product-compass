@@ -22,6 +22,7 @@ import {
   setReferralStatus,
   markRead,
   viewerRole,
+  allowedStatusesFor,
   type ReferralApplication,
   type Comment,
 } from "@/lib/referrals";
@@ -45,6 +46,26 @@ export default function ReferralThreadPage() {
   const role_ = app ? viewerRole(app, user?.id ?? "", user?.email, admin) : "none";
   const isParticipant = role_ === "referee" || role_ === "referrer";
   const isAdminOnly = role_ === "admin";
+
+  const allowed = allowedStatusesFor(role_);
+  const statusHint =
+    role_ === "referrer"
+      ? "You drive these updates — mark Seen, Shared with HM, or Shortlisted as things move. Either of you can Close."
+      : role_ === "referee"
+        ? "The referrer updates progress here. You can mark Closed if you withdraw or move on."
+        : role_ === "admin"
+          ? "Admin override — you can set any stage."
+          : undefined;
+
+  // Warm, role-aware nudge for an empty thread + a starter placeholder.
+  const threadPrompt =
+    role_ === "referrer"
+      ? "This is your private line with the applicant. Say hi, let them know you’ve got their back, and tell them what would help you make the intro — a short blurb, their resume, anything."
+      : "This is your private line with your referrer. Introduce yourself warmly, share why this role genuinely fits you, and ask what would help them refer you.";
+  const threadPlaceholder =
+    role_ === "referrer"
+      ? "Hi! Happy to help with this — could you send a short blurb I can pass along?"
+      : "Hi! Thank you so much for the referral — here’s why I’m excited about this role…";
 
   // Load application + role; participants also load comments + mark read.
   useEffect(() => {
@@ -156,11 +177,13 @@ export default function ReferralThreadPage() {
               <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-muted">
                 Status · {statusLabel(app.status)}
               </p>
-              <StatusStrip status={app.status} busy={busy} onChange={changeStatus} />
-              <p className="mt-1 text-xs text-muted">
-                Both the applicant and referrer can update this; admins can
-                override.
-              </p>
+              <StatusStrip
+                status={app.status}
+                busy={busy}
+                onChange={changeStatus}
+                allowed={allowed}
+                hint={statusHint}
+              />
             </div>
           </section>
 
@@ -189,6 +212,8 @@ export default function ReferralThreadPage() {
                 meId={user.id}
                 refereeId={app.referee_id}
                 onPost={postComment}
+                emptyPrompt={threadPrompt}
+                placeholder={threadPlaceholder}
               />
             ) : (
               <p className="mt-3 text-sm text-muted">
@@ -220,11 +245,15 @@ function Thread({
   meId,
   refereeId,
   onPost,
+  emptyPrompt,
+  placeholder,
 }: {
   comments: Comment[] | null;
   meId: string;
   refereeId: string;
   onPost: (body: string) => Promise<boolean | undefined>;
+  emptyPrompt: string;
+  placeholder: string;
 }) {
   const [draft, setDraft] = useState("");
   const [sending, setSending] = useState(false);
@@ -251,9 +280,12 @@ function Thread({
           Loading messages…
         </div>
       ) : comments.length === 0 ? (
-        <p className="text-sm text-muted">
-          No messages yet. Say hello — only you and the other party can read this.
-        </p>
+        <div className="rounded-card border border-dashed border-primary/30 bg-primary-soft/40 px-4 py-3">
+          <p className="text-sm text-ink">{emptyPrompt}</p>
+          <p className="mt-1 text-xs text-muted">
+            Only you and the other party can read this — never admins.
+          </p>
+        </div>
       ) : (
         <ul className="space-y-3">
           {comments.map((c) => {
@@ -288,7 +320,7 @@ function Thread({
             if ((e.metaKey || e.ctrlKey) && e.key === "Enter") send();
           }}
           rows={2}
-          placeholder="Write a message…"
+          placeholder={placeholder}
           className="min-h-[44px] w-full resize-y rounded-btn border border-border bg-bg px-3 py-2 text-sm text-ink outline-none focus:border-primary"
         />
         <button

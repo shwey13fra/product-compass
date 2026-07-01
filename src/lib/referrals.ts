@@ -176,6 +176,24 @@ export function viewerRole(
   return "none";
 }
 
+// Which statuses a given viewer may set. Referrer drives the pipeline (they have
+// the hiring-side visibility); referee can only withdraw (Closed); admin overrides
+// everything. UX guardrail only — RLS already gates who can touch the row at all.
+export function allowedStatusesFor(
+  role: "referee" | "referrer" | "admin" | "none"
+): ApplicationStatus[] {
+  switch (role) {
+    case "referrer":
+      return ["seen", "shared_with_hm", "shortlisted", "closed"];
+    case "referee":
+      return ["closed"];
+    case "admin":
+      return ["applied", "seen", "shared_with_hm", "shortlisted", "closed"];
+    default:
+      return [];
+  }
+}
+
 export function statusBadgeRole(
   app: ReferralApplication,
   userId: string,
