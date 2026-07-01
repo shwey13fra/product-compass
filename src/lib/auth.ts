@@ -45,8 +45,10 @@ export async function verifyEmailOtp(
 ): Promise<SignInResult> {
   const trimmed = email.trim().toLowerCase();
   const code = token.replace(/\s+/g, "");
-  if (!/^\d{6}$/.test(code)) {
-    return { ok: false, error: "Enter the 6-digit code from your email." };
+  // Supabase's email OTP length is configurable (6–10 digits) — accept the
+  // whole range instead of assuming 6, so it works whatever the project is set to.
+  if (!/^\d{6,10}$/.test(code)) {
+    return { ok: false, error: "Enter the code from your email." };
   }
   const { error } = await supabase.auth.verifyOtp({
     email: trimmed,

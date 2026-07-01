@@ -70,7 +70,7 @@ function SignInForm() {
           htmlFor="code"
           className="mt-4 block text-sm font-semibold text-ink"
         >
-          6-digit code
+          Sign-in code
         </label>
         <div className="mt-1.5 flex items-center gap-2 rounded-btn border border-border bg-bg px-3 focus-within:border-primary">
           <KeyRound className="h-4 w-4 text-muted" aria-hidden />
@@ -79,15 +79,15 @@ function SignInForm() {
             inputMode="numeric"
             autoComplete="one-time-code"
             pattern="[0-9]*"
-            maxLength={6}
+            maxLength={10}
             required
             autoFocus
             value={code}
             onChange={(e) =>
-              setCode(e.target.value.replace(/\D/g, "").slice(0, 6))
+              setCode(e.target.value.replace(/\D/g, "").slice(0, 10))
             }
-            placeholder="123456"
-            className="min-h-[44px] w-full bg-transparent text-lg tracking-[0.4em] text-ink outline-none placeholder:tracking-normal placeholder:text-muted"
+            placeholder="Code from your email"
+            className="min-h-[44px] w-full bg-transparent text-lg tracking-[0.3em] text-ink outline-none placeholder:text-base placeholder:tracking-normal placeholder:text-muted"
           />
         </div>
 
@@ -100,7 +100,7 @@ function SignInForm() {
 
         <button
           type="submit"
-          disabled={phase === "verifying" || code.length !== 6}
+          disabled={phase === "verifying" || code.length < 6}
           className="mt-4 inline-flex min-h-[44px] w-full items-center justify-center gap-2 rounded-btn bg-primary px-4 text-sm font-semibold text-white transition-colors hover:bg-primary-hover disabled:opacity-60"
         >
           {phase === "verifying" ? (
