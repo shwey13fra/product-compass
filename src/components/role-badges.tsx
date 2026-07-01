@@ -1,4 +1,4 @@
-import { CheckCircle2, AlertTriangle, ShieldX, Clock, HelpCircle } from "lucide-react";
+import { CheckCircle2, AlertTriangle, ShieldX, Clock, HelpCircle, UserCheck } from "lucide-react";
 import {
   archetypeLabel,
   getBand,
@@ -37,6 +37,16 @@ export function ScoreBadge({
       <span className={big ? "text-base font-bold" : "font-bold"}>{score}</span>
       <span className="opacity-80">·</span>
       <span>{band.label}</span>
+    </span>
+  );
+}
+
+// Stage 7 — "Referral available" badge for admin-posted referral roles.
+export function ReferralBadge() {
+  return (
+    <span className="inline-flex items-center gap-1.5 rounded-full bg-primary-soft px-2.5 py-0.5 text-xs font-semibold text-primary">
+      <UserCheck className="h-3.5 w-3.5" aria-hidden />
+      Referral available
     </span>
   );
 }

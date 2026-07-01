@@ -2,6 +2,7 @@ import Link from "next/link";
 import { Compass, AlertTriangle, Inbox, ListChecks } from "lucide-react";
 import { getRoles } from "@/lib/roles";
 import { RolesBrowser } from "@/components/RolesBrowser";
+import { AuthNav } from "@/components/AuthNav";
 
 export const metadata = {
   title: "Roles — Product Compass",
@@ -21,13 +22,16 @@ export default async function RolesPage() {
             <Compass className="h-4 w-4" aria-hidden />
             Product Compass
           </span>
-          <Link
-            href="/tracking"
-            className="inline-flex min-h-[44px] items-center gap-1.5 rounded-btn px-3 text-sm font-semibold text-muted transition-colors hover:bg-surface hover:text-primary"
-          >
-            <ListChecks className="h-4 w-4" aria-hidden />
-            Tracking
-          </Link>
+          <nav className="flex items-center gap-1">
+            <Link
+              href="/tracking"
+              className="inline-flex min-h-[44px] items-center gap-1.5 rounded-btn px-3 text-sm font-semibold text-muted transition-colors hover:bg-surface hover:text-primary"
+            >
+              <ListChecks className="h-4 w-4" aria-hidden />
+              Tracking
+            </Link>
+            <AuthNav />
+          </nav>
         </div>
         <h1 className="mt-2 font-heading text-3xl font-extrabold tracking-tight text-ink sm:text-4xl">
           Curated PM roles

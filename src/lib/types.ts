@@ -24,6 +24,9 @@ export type Role = {
   crowd_response_days: number | null;
   has_warm_path: boolean;
   warm_path_note: string | null;
+  // Stage 7 — referral roles posted by an admin; applying needs sign-in.
+  is_referral: boolean;
+  referrer_email: string | null;
 };
 
 // --- Archetype display -------------------------------------------------------

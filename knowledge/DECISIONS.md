@@ -2,6 +2,11 @@
 
 > One line per major architectural choice. Newest at top. Format: date · decision · why.
 
+- 2026-06-30 · Stage 7 auth = **two tracks**: existing anonymous `applications`/`compass_uid` + public `roles` read stay untouched; only the NEW referral tables (+ `roles` writes) get auth-based RLS · the only way to satisfy "turn ON RLS" AND "keep the user side working without login."
+- 2026-06-30 · Admins identified in Postgres by a `public.is_admin()` SQL function holding the same email list as `ADMIN_EMAILS` in `src/config.ts` (two places, kept in sync) · simplest v1 enforcement; no extra tables/triggers/flags. `config.ts` drives the UI, `is_admin()` drives RLS.
+- 2026-06-30 · `comments` RLS references ONLY referee/referrer, never `is_admin()`, so admins are **structurally** unable to read/write comments; a SECURITY DEFINER trigger keeps `comment_count`/`last_comment_at` on `referral_applications` so admins can still see *that* a thread exists · meets "admin sees status + thread-exists but not contents" without trusting app code.
+- 2026-06-30 · Referrer is matched by **email** (`role.referrer_email` = signed-in email), not a pre-created account · referrer can be tagged before they ever sign in; no invite plumbing in v1.
+- 2026-06-30 · Auth is **client-side** (magic link, `@supabase/supabase-js` `detectSessionInUrl` + PKCE); admin/referral pages are client components gated on the session · matches the existing all-client tracking pattern; avoids `@supabase/ssr` cookie plumbing. Anon key only — no service-role anywhere.
 - 2026-06-28 · Live positioning reuses the SAME `buildPositioningPrompt` + `parseBrief` as the manual path (route sends `{role, profile}`, assembles + parses server-side) · one prompt + one parser = live and manual briefs are identical-shaped; less to keep in sync.
 - 2026-06-28 · Budget guard = per-process module counter (default 15, `POSITION_CALL_CAP`) + `claude-haiku-4-5` + `max_tokens 1024`; validation 400s don't increment · cheap + bounded; resets on cold start (a dev guard, not a per-user quota — plumb `compass_uid` later if needed).
 - 2026-06-28 · Fit read is pure-JS theme bucketing (JD keyword themes ∩ experience → % match + framable gaps), NOT an AI call · must be free/instant and available the moment experience is filled, before any brief.

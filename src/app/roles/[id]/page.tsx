@@ -11,9 +11,15 @@ import {
 } from "lucide-react";
 import { getRoleById } from "@/lib/roles";
 import { getBand } from "@/lib/types";
-import { ArchetypeTag, ScoreBadge, FreshnessFlag } from "@/components/role-badges";
+import {
+  ArchetypeTag,
+  ScoreBadge,
+  FreshnessFlag,
+  ReferralBadge,
+} from "@/components/role-badges";
 import { PositioningPanel } from "@/components/PositioningPanel";
 import { ApplyButton } from "@/components/ApplyButton";
+import { ReferralApplyButton } from "@/components/ReferralApplyButton";
 
 export const dynamic = "force-dynamic";
 
@@ -55,6 +61,7 @@ export default async function RoleDetailPage({
         <div className="flex flex-wrap items-center gap-2">
           <ArchetypeTag archetype={role.archetype} />
           <FreshnessFlag isLive={role.is_live} checkedAt={role.freshness_checked_at} />
+          {role.is_referral && <ReferralBadge />}
         </div>
         <h1 className="mt-3 font-heading text-3xl font-extrabold tracking-tight text-ink sm:text-4xl">
           {role.title}
@@ -67,8 +74,13 @@ export default async function RoleDetailPage({
           </p>
         )}
 
-        {/* Stage 5 — track this application (strip + nudges live on /tracking) */}
-        <ApplyButton roleId={role.id} />
+        {/* Referral roles (Stage 7) require sign-in + open a shared thread;
+            ordinary roles use the anonymous compass_uid tracking (Stage 5). */}
+        {role.is_referral ? (
+          <ReferralApplyButton role={role} />
+        ) : (
+          <ApplyButton roleId={role.id} />
+        )}
       </header>
 
       {/* Real-PM score + signals */}
