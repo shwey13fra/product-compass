@@ -2,58 +2,145 @@
 
 import { Suspense, useState } from "react";
 import Link from "next/link";
-import { useSearchParams } from "next/navigation";
-import { Compass, Mail, CheckCircle2, AlertTriangle, Loader2 } from "lucide-react";
-import { signInWithEmail } from "@/lib/auth";
+import { useRouter, useSearchParams } from "next/navigation";
+import {
+  Compass,
+  Mail,
+  KeyRound,
+  AlertTriangle,
+  Loader2,
+  ArrowLeft,
+} from "lucide-react";
+import { signInWithEmail, verifyEmailOtp } from "@/lib/auth";
 
 function SignInForm() {
+  const router = useRouter();
   const params = useSearchParams();
-  const next = params.get("next") ?? undefined;
+  const next = params.get("next") || "/roles";
 
   const [email, setEmail] = useState("");
-  const [state, setState] = useState<"idle" | "sending" | "sent" | "error">(
-    "idle"
-  );
+  const [code, setCode] = useState("");
+  // "email" = ask for email · "code" = code sent, ask for the 6 digits.
+  const [phase, setPhase] = useState<
+    "email" | "sending" | "code" | "verifying"
+  >("email");
   const [error, setError] = useState<string | null>(null);
 
-  async function onSubmit(e: React.FormEvent) {
+  async function sendCode(e: React.FormEvent) {
     e.preventDefault();
-    setState("sending");
+    setPhase("sending");
     setError(null);
     const res = await signInWithEmail(email, next);
     if (res.ok) {
-      setState("sent");
+      setPhase("code");
     } else {
       setError(res.error);
-      setState("error");
+      setPhase("email");
     }
   }
 
-  if (state === "sent") {
+  async function verify(e: React.FormEvent) {
+    e.preventDefault();
+    setPhase("verifying");
+    setError(null);
+    const res = await verifyEmailOtp(email, code);
+    if (res.ok) {
+      // Session is set — go where they were headed (admins land on /roles and
+      // then see the Admin link in the header).
+      router.replace(next);
+    } else {
+      setError(res.error);
+      setPhase("code");
+    }
+  }
+
+  // Step 2 — enter the 6-digit code.
+  if (phase === "code" || phase === "verifying") {
     return (
-      <div className="rounded-card border border-success/30 bg-success-soft px-6 py-8 text-center">
-        <CheckCircle2 className="mx-auto h-9 w-9 text-success" aria-hidden />
-        <h2 className="mt-3 font-heading text-xl font-bold text-ink">
-          Check your inbox
-        </h2>
-        <p className="mt-1.5 text-sm text-muted">
-          We sent a one-tap sign-in link to{" "}
-          <span className="font-semibold text-ink">{email}</span>. Open it on
-          this device to finish signing in.
-        </p>
+      <form
+        onSubmit={verify}
+        className="rounded-card border border-border bg-surface p-6 shadow-sm"
+      >
+        <div className="flex items-center gap-2 rounded-btn bg-success-soft px-3 py-2 text-sm text-ink">
+          <Mail className="h-4 w-4 text-success" aria-hidden />
+          Code sent to <span className="font-semibold">{email}</span>
+        </div>
+
+        <label
+          htmlFor="code"
+          className="mt-4 block text-sm font-semibold text-ink"
+        >
+          6-digit code
+        </label>
+        <div className="mt-1.5 flex items-center gap-2 rounded-btn border border-border bg-bg px-3 focus-within:border-primary">
+          <KeyRound className="h-4 w-4 text-muted" aria-hidden />
+          <input
+            id="code"
+            inputMode="numeric"
+            autoComplete="one-time-code"
+            pattern="[0-9]*"
+            maxLength={6}
+            required
+            autoFocus
+            value={code}
+            onChange={(e) =>
+              setCode(e.target.value.replace(/\D/g, "").slice(0, 6))
+            }
+            placeholder="123456"
+            className="min-h-[44px] w-full bg-transparent text-lg tracking-[0.4em] text-ink outline-none placeholder:tracking-normal placeholder:text-muted"
+          />
+        </div>
+
+        {error ? (
+          <p className="mt-2 flex items-center gap-1.5 text-sm text-danger">
+            <AlertTriangle className="h-4 w-4" aria-hidden />
+            {error}
+          </p>
+        ) : null}
+
+        <button
+          type="submit"
+          disabled={phase === "verifying" || code.length !== 6}
+          className="mt-4 inline-flex min-h-[44px] w-full items-center justify-center gap-2 rounded-btn bg-primary px-4 text-sm font-semibold text-white transition-colors hover:bg-primary-hover disabled:opacity-60"
+        >
+          {phase === "verifying" ? (
+            <>
+              <Loader2 className="h-4 w-4 animate-spin" aria-hidden />
+              Verifying…
+            </>
+          ) : (
+            "Verify & sign in"
+          )}
+        </button>
+
         <button
           type="button"
-          onClick={() => setState("idle")}
-          className="mt-4 text-sm font-semibold text-primary hover:text-primary-hover"
+          onClick={() => {
+            setPhase("email");
+            setCode("");
+            setError(null);
+          }}
+          className="mt-3 inline-flex items-center gap-1.5 text-sm font-semibold text-muted hover:text-primary"
         >
+          <ArrowLeft className="h-4 w-4" aria-hidden />
           Use a different email
         </button>
-      </div>
+
+        <p className="mt-3 text-xs text-muted">
+          Same email also contains a one-tap link if you prefer — but the code is
+          the most reliable (works even if Gmail pre-scans the link, or you open
+          it in another browser).
+        </p>
+      </form>
     );
   }
 
+  // Step 1 — enter email.
   return (
-    <form onSubmit={onSubmit} className="rounded-card border border-border bg-surface p-6 shadow-sm">
+    <form
+      onSubmit={sendCode}
+      className="rounded-card border border-border bg-surface p-6 shadow-sm"
+    >
       <label htmlFor="email" className="block text-sm font-semibold text-ink">
         Email address
       </label>
@@ -71,7 +158,7 @@ function SignInForm() {
         />
       </div>
 
-      {state === "error" && error ? (
+      {error ? (
         <p className="mt-2 flex items-center gap-1.5 text-sm text-danger">
           <AlertTriangle className="h-4 w-4" aria-hidden />
           {error}
@@ -80,22 +167,22 @@ function SignInForm() {
 
       <button
         type="submit"
-        disabled={state === "sending"}
+        disabled={phase === "sending"}
         className="mt-4 inline-flex min-h-[44px] w-full items-center justify-center gap-2 rounded-btn bg-primary px-4 text-sm font-semibold text-white transition-colors hover:bg-primary-hover disabled:opacity-60"
       >
-        {state === "sending" ? (
+        {phase === "sending" ? (
           <>
             <Loader2 className="h-4 w-4 animate-spin" aria-hidden />
-            Sending link…
+            Sending code…
           </>
         ) : (
-          "Send sign-in link"
+          "Send sign-in code"
         )}
       </button>
 
       <p className="mt-3 text-xs text-muted">
-        Passwordless — we email you a one-tap link, no password to remember.
-        Sign-in is only needed for referral roles and the admin view; browsing,
+        Passwordless — we email you a 6-digit code (and a one-tap link). Sign-in
+        is only needed for referral roles and the admin view; browsing,
         positioning, and personal tracking work without it.
       </p>
     </form>
@@ -116,10 +203,14 @@ export default function SignInPage() {
         Sign in with email
       </h1>
       <p className="mt-2 text-sm text-muted">
-        Enter your email and we’ll send you a one-tap sign-in link.
+        Enter your email and we’ll send you a 6-digit sign-in code.
       </p>
       <div className="mt-6">
-        <Suspense fallback={<div className="h-48 rounded-card border border-border bg-surface" />}>
+        <Suspense
+          fallback={
+            <div className="h-48 rounded-card border border-border bg-surface" />
+          }
+        >
           <SignInForm />
         </Suspense>
       </div>

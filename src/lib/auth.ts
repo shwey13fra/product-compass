@@ -35,6 +35,28 @@ export async function signInWithEmail(
   return { ok: true };
 }
 
+// Verify the 6-digit code from the sign-in email. Robust alternative to the
+// magic link: immune to Gmail pre-scanning the link and works cross-browser
+// (no PKCE code verifier needed). On success the session is established and
+// persisted, and useUser() re-renders via onAuthStateChange.
+export async function verifyEmailOtp(
+  email: string,
+  token: string
+): Promise<SignInResult> {
+  const trimmed = email.trim().toLowerCase();
+  const code = token.replace(/\s+/g, "");
+  if (!/^\d{6}$/.test(code)) {
+    return { ok: false, error: "Enter the 6-digit code from your email." };
+  }
+  const { error } = await supabase.auth.verifyOtp({
+    email: trimmed,
+    token: code,
+    type: "email",
+  });
+  if (error) return { ok: false, error: error.message };
+  return { ok: true };
+}
+
 export async function signOut(): Promise<void> {
   await supabase.auth.signOut();
 }
