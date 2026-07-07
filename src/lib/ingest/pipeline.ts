@@ -57,18 +57,28 @@ export async function runIngest(client: SupabaseClient): Promise<IngestSummary> 
   if (exErr) errors.push(`read existing: ${exErr.message}`);
   const existingIngestedIds = (existingRows ?? []).map((r: { id: string }) => r.id);
   const existingSet = new Set(existingIngestedIds);
-  const added = freshIds.filter((id) => !existingSet.has(id)).length;
-  const updated = freshIds.length - added;
 
-  // 4) Upsert the fresh rows (RLS: admin JWT on `client`).
+  // 4) Upsert the fresh rows (RLS: admin JWT on `client`). Only count
+  //    added/updated (and run the expire pass) if the write actually succeeded —
+  //    otherwise the summary would report phantom rows.
+  let added = 0;
+  let updated = 0;
+  let upsertOk = true;
   if (rows.length > 0) {
     const { error: upErr } = await client.from("roles").upsert(rows, { onConflict: "id" });
-    if (upErr) errors.push(`upsert: ${upErr.message}`);
+    if (upErr) {
+      errors.push(`upsert: ${upErr.message}`);
+      upsertOk = false;
+    } else {
+      added = freshIds.filter((id) => !existingSet.has(id)).length;
+      updated = freshIds.length - added;
+    }
   }
 
   // 5) Expire ingested rows missing from this pull. NEVER touches seed/referral
   //    rows — the .in("source", INGESTED_SOURCES) filter excludes source='seed'.
-  const toExpire = classifyExpiry(existingIngestedIds, freshIds);
+  //    Skip if the upsert failed (this pull didn't persist).
+  const toExpire = upsertOk ? classifyExpiry(existingIngestedIds, freshIds) : [];
   let expired = 0;
   if (toExpire.length > 0) {
     const { error: expErr } = await client

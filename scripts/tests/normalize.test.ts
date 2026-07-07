@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { isPmTitle, normalizeJob } from "@/lib/ingest/normalize";
+import { isPmTitle, normalizeJob, ingestedId } from "@/lib/ingest/normalize";
 import type { RawJob } from "@/lib/ingest/types";
 
 // PM-title filter: keep real PM titles, exclude project/program manager.
@@ -22,7 +22,10 @@ const raw: RawJob = {
 };
 const now = new Date("2026-07-07T00:00:00Z");
 const role = normalizeJob(raw, now);
-assert.equal(role.id, "greenhouse:4012345");
+// roles.id is a uuid column — the id must be valid uuid syntax AND deterministic.
+assert.match(role.id, /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/);
+assert.equal(role.id, ingestedId("greenhouse", "4012345"));
+assert.equal(role.id, normalizeJob(raw, now).id); // same input → same id
 assert.equal(role.source, "greenhouse");
 assert.equal(role.external_id, "4012345");
 assert.equal(role.apply_url, raw.apply_url);

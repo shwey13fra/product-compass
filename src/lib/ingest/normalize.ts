@@ -1,5 +1,6 @@
 // Stage 8 — PM-title filter + RawJob → Role normalization.
 
+import { createHash } from "node:crypto";
 import type { Role } from "@/lib/types";
 import type { RawJob } from "./types";
 import { scoreRealPm, inferArchetype } from "../realPmScore";
@@ -7,6 +8,15 @@ import { scoreRealPm, inferArchetype } from "../realPmScore";
 // Generic crowd-response default for ingested roles (we have no real crowd
 // data for them — the seeded roles carry hand-set values).
 const INGESTED_CROWD_DAYS = 14;
+
+// roles.id is a `uuid` column (Postgres default gen_random_uuid()). A raw
+// "greenhouse:123" string is NOT a valid uuid, so derive a STABLE uuid from
+// source+external_id: deterministic (same job → same id, so re-syncs upsert the
+// same row) and valid uuid syntax. sha1 → canonical 8-4-4-4-12 hex.
+export function ingestedId(source: string, externalId: string): string {
+  const h = createHash("sha1").update(`${source}:${externalId}`).digest("hex");
+  return `${h.slice(0, 8)}-${h.slice(8, 12)}-${h.slice(12, 16)}-${h.slice(16, 20)}-${h.slice(20, 32)}`;
+}
 
 export function isPmTitle(title: string): boolean {
   const t = title.toLowerCase();
@@ -27,7 +37,7 @@ export function normalizeJob(raw: RawJob, now: Date = new Date()): Role {
   const { score, signals } = scoreRealPm(raw.title, raw.jd_text);
   const iso = now.toISOString();
   return {
-    id: `${raw.source}:${raw.external_id}`,
+    id: ingestedId(raw.source, raw.external_id),
     company: raw.company,
     title: raw.title,
     archetype: inferArchetype(raw.title, raw.jd_text),
