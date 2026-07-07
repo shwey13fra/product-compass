@@ -6,7 +6,7 @@ import type { Role } from "@/lib/types";
 // server-side too. No owner_key here: roles are shared across all users.
 
 const ROLE_COLUMNS =
-  "id,company,title,archetype,real_pm_score,real_pm_signals,is_live,freshness_checked_at,location,jd_text,crowd_response_days,has_warm_path,warm_path_note,is_referral,referrer_email";
+  "id,company,title,archetype,real_pm_score,real_pm_signals,is_live,freshness_checked_at,location,jd_text,crowd_response_days,has_warm_path,warm_path_note,is_referral,referrer_email,source,external_id,apply_url,ingested_at";
 
 export type RolesResult =
   | { ok: true; roles: Role[] }

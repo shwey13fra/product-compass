@@ -27,6 +27,12 @@ export type Role = {
   // Stage 7 — referral roles posted by an admin; applying needs sign-in.
   is_referral: boolean;
   referrer_email: string | null;
+  // Stage 8 — ingestion provenance. 'seed' = illustrative sample data;
+  // 'greenhouse'|'lever'|'adzuna' = ingested from a live source.
+  source: string | null;
+  external_id: string | null;
+  apply_url: string | null;
+  ingested_at: string | null;
 };
 
 // --- Archetype display -------------------------------------------------------
