@@ -79,14 +79,18 @@ export default async function RoleDetailPage({
         )}
 
         {/* Referral roles (Stage 7) require sign-in + open a shared thread;
-            ordinary roles use the anonymous compass_uid tracking (Stage 5). */}
-        {role.is_referral ? (
-          <ReferralApplyButton role={role} />
-        ) : role.apply_url ? (
-          <ApplyOutButton url={role.apply_url} source={sourceLabel(role.source)} />
-        ) : (
-          <ApplyButton roleId={role.id} />
-        )}
+            ingested roles (Stage 8) link out to apply_url; ordinary roles use
+            the anonymous compass_uid tracking (Stage 5). Wrapped in a block so
+            the CTA sits BELOW the inline location, never beside it. */}
+        <div>
+          {role.is_referral ? (
+            <ReferralApplyButton role={role} />
+          ) : role.apply_url ? (
+            <ApplyOutButton url={role.apply_url} source={sourceLabel(role.source)} />
+          ) : (
+            <ApplyButton roleId={role.id} />
+          )}
+        </div>
       </header>
 
       {/* Real-PM score + signals */}
