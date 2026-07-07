@@ -75,6 +75,13 @@ Status legend: ✅ built + live-verified · 🟡 built + pushed, not yet click-v
 - **Security:** admins are *structurally* blocked from reading comments — enforced by Postgres RLS, not app code.
 - *Full three-persona flow + the "admin can't read comments" RLS proof still to be click-verified.*
 
+### 5.10 Job ingestion from legal sources (Stage 8) 🟡
+- Admin-triggered ingest (`POST /api/ingest`, "Sync jobs now") pulls real PM roles from **Greenhouse** + **Lever** (public, no auth) + **Adzuna** (India breadth, free keys). No LinkedIn/Naukri scraping.
+- PM-title filter (excludes project/program manager); normalized into the `roles` schema with `source`, `external_id`, `apply_url`, `ingested_at`; **rule-based real-PM scorer** (pure JS, **no AI/credits**); best-effort archetype inference.
+- Dedupe by `source:external_id` + cross-source company|title|location; upsert; stale ingested roles → `is_live=false`. Ingested roles are **cold-path** (Apply links OUT; fit read + crowd stat), badged by source; the 50 seed roles are tagged `source='seed'` (badged "Sample", deletable).
+- **Write path:** the route forwards the admin's Supabase JWT so writes pass the admin-only `roles` RLS — no `service_role`. Adzuna keys server-env only.
+- *Live sync click-through (run the SQL, set Adzuna keys, "Sync jobs now") still pending user verification.*
+
 ---
 
 ## 6. Design — "Warm Clay"

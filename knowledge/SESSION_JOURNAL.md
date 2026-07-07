@@ -5,7 +5,17 @@
 
 ---
 
-## ▶ CURRENT STATE (last updated: 2026-07-01, end of session 8)
+## ▶ CURRENT STATE (last updated: 2026-07-07, end of session 9)
+
+**Phase:** STAGE 1–8 ✅ built · **STAGE 8 (job ingestion) BUILT + pushed to `main`, tests green, tsc+build clean — NOT yet live-verified.**
+**Stage 8 what shipped (commits after `d1d5bb2`):** brainstorm→spec (`docs/superpowers/specs/2026-07-07-stage8-job-ingestion-design.md`)→plan (`docs/superpowers/plans/2026-07-07-stage8-job-ingestion.md`)→10 TDD tasks. New: `scripts/stage8-job-ingestion.sql` (adds `source/external_id/apply_url/ingested_at` to `roles`; tags 50 seed rows `source='seed'`; unique idx on `(source,external_id)`); `src/lib/realPmScore.ts` (pure-JS scorer + `inferArchetype`, NO AI); `src/lib/ingest/{types,normalize,sources,pipeline}.ts`; `src/app/api/ingest/route.ts` (POST, admin-JWT-forwarded writes); `src/components/ApplyOutButton.tsx`; `SourceBadge`+`sourceLabel` in `role-badges.tsx`; admin **"Sync jobs now"** panel. Tests: `scripts/tests/*.test.ts` run via `npx tsx` (added `tsx` devDep).
+**Verified so far:** all 4 tsx tests pass; `tsc --noEmit` + `next build` clean (`/api/ingest` registered as ƒ). **Live integration probe against real Stripe Greenhouse board: 495 jobs → 24 PM after filter, scores 32–92, archetypes assigned, no HTML leak.** Company chosen for smoke test: **`stripe`** (in `GREENHOUSE_BOARDS`).
+**NEXT-UP for Stage 8 (user smoke test):** (1) run `scripts/stage8-job-ingestion.sql` in Supabase; (2) set `ADZUNA_APP_ID`+`ADZUNA_APP_KEY` in `.env.local` + Vercel; (3) sign in as admin → `/admin` → "Sync jobs now" → expect added>0, `/roles` shows badged rows, Apply links out. That live write also proves the JWT/RLS path (a non-admin session 403s).
+**Still also pending (pre-Stage-8 debt):** the Stage 7 three-persona referral RLS proof + the Stage 5 live tracking click-through (unchanged — see below).
+
+---
+
+## ▶ PRIOR STATE (end of session 8)
 
 **Phase:** STAGE 1–7 ✅ · **STAGE 7 (auth + admin + referral collaboration) BUILT + DEPLOYED + sign-in/admin flow user-verified live.** Migration run, Gmail SMTP live, auth working end-to-end. Everything committed + pushed to `main` (HEAD `065360f`) and auto-deployed to Vercel.
 **Stage 7 what shipped:** Supabase passwordless sign-in — **now via 8-digit OTP code (typed), not the magic link** (see session-8 fixes for why); admins via `ADMIN_EMAILS` (`src/config.ts`) mirrored by `public.is_admin()` SQL fn for RLS; admin view (post referral role `is_referral=true` + tag `referrer_email`; overview showing status + *thread-exists count*, never contents); referral roles badged in the main list; applying (sign-in-gated) creates a shared `referral_application`; per-application shared **status strip with role-based permissions** + a private comment thread readable ONLY by referee+referrer (admins structurally blocked by RLS); in-app unread dot. **Anonymous side (browse/positioning/personal tracking via `compass_uid`) untouched.**
@@ -138,3 +148,12 @@ Resumed to verify Stage 7. Migration run by the user (success). Committed + push
 - **Admin post-role bug:** `null value in column "crowd_response_days" … not-null constraint` — `adminCreateReferralRole` omitted NOT NULL cols. Fixed: defaults `real_pm_signals: []`, `crowd_response_days: 7` (`b8984f5`).
 - **Product refinement (user-requested, confirmed via AskUserQuestion):** referral status is no longer a free-for-all. `allowedStatusesFor()` + `StatusStrip` `allowed`/`hint` props → **referrer drives Seen/Shared/Shortlisted/Closed; referee only Closed; admin overrides.** Anonymous `/tracking` strip unchanged. Plus a **warm, role-aware empty-thread prompt** + starter placeholder (`referrals/[id]`). Decision logged in `DECISIONS.md`.
 - **Verified live:** sign-in via OTP works; Admin link shows for admin; `/roles`, `/signin` (OTP flow), landing all serve latest on the lilac URL; `tsc`+`build` clean each commit. **Still pending:** the full three-persona referral collaboration + RLS "admin can't read comments" proof, and the deferred Stage 5 live-flow confirm (see NEXT UP 1–2).
+
+### 2026-07-07 — Session 9 (Stage 8: job ingestion from legal sources)
+User asked to "start at step 8" → clarified there was no Stage 8; it's a **new feature** (job ingestion). Ran brainstorming → spec → writing-plans → built inline via 10 TDD tasks.
+- **Two findings that shaped the design:** (1) **no rule-based real-PM scorer existed** — the 50 seed scores were hand-authored in `roles-data.mjs`; Stage 8 required building `src/lib/realPmScore.ts` from scratch (reused the `THEMES` keyword idea from `positioning.ts`). (2) **`roles` is admin-write-locked by RLS** (stage7 SQL) and `service_role` is banned → the ingest route **forwards the admin's Supabase JWT** (per-request client) so writes pass RLS. Both confirmed by reading the code before building.
+- **Product decision (user):** the 50 curated roles are **dummy data** — tag them `source='seed'`, badge "Sample", delete later once ingestion works. So no cap-ranking needed; the `source` column marks sample vs real.
+- **Cost check (user asked):** a sync is **free** — Greenhouse/Lever public+free, Adzuna free tier (rate-limited, never billed), **zero Anthropic credits** (rule-based scorer). Adzuna capped at 50 rows/sync.
+- **Built:** schema SQL + `Role` fields; `realPmScore.ts` (+archetype); `ingest/{types,normalize,sources,pipeline}.ts`; `POST /api/ingest`; `SourceBadge`/`sourceLabel`; `ApplyOutButton`; admin "Sync jobs now" panel. Smoke-test source = **`stripe`** (Greenhouse). Added `tsx` devDep for standalone TS tests.
+- **Verified:** 4 tsx test files green (scorer/normalize/sources/pipeline); `tsc`+`next build` clean; `/api/ingest` registered. **Live integration probe against the real Stripe board: 495 jobs → 24 PM after filter, scores 32–92, no HTML leak** (caught + fixed a `stripHtml` order bug pre-ship: decode entities before stripping tags, since Greenhouse content is entity-encoded). All committed to `main`.
+- **NOT yet done (user's live smoke test):** run `scripts/stage8-job-ingestion.sql`; set `ADZUNA_APP_ID`/`ADZUNA_APP_KEY`; `/admin` → "Sync jobs now". That live write also proves the JWT/RLS path.

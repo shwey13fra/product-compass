@@ -49,6 +49,26 @@ server-side route handler (`/api/position`) that holds the Anthropic key — it 
    To see the time-based follow-up nudge without waiting, set a card to *Seen* and click
    **"Demo: simulate a week passing."**
 
+## Stage 8 — job ingestion (real roles from legal sources)
+
+An admin can pull real PM openings from public, no-scrape sources into the roles
+table. Ingested roles are rule-scored (no AI, no credits), badged by source, and
+their "Apply" links out to the real posting. The 50 seeded roles are tagged
+`source='seed'` (badged "Sample") and can be deleted once ingestion is trusted:
+`delete from roles where source = 'seed';`
+
+**One-time setup:** run `scripts/stage8-job-ingestion.sql` in the Supabase SQL editor.
+
+**Add a company (Greenhouse):** put its `{token}` from `boards.greenhouse.io/{token}`
+into `GREENHOUSE_BOARDS` in `src/config.ts`; commit → deploy.
+**Add a company (Lever):** put its `{company}` from `jobs.lever.co/{company}` into
+`LEVER_COMPANIES`.
+**Set Adzuna keys (India breadth):** register free at `developer.adzuna.com`; add
+`ADZUNA_APP_ID` + `ADZUNA_APP_KEY` to `.env.local` and to Vercel env (Production);
+redeploy. (Greenhouse/Lever need no keys.)
+**Run a sync:** sign in as an admin → `/admin` → **"Sync jobs now"** → read the
+summary (added / updated / expired, per source). No AI credits are used.
+
 ## Decision log (one line each)
 - **No auth in v1** — anonymous `compass_uid` (UUID in localStorage) as `owner_key`; add Supabase Auth
   + RLS in v2.
