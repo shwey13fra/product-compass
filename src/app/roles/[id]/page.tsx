@@ -16,10 +16,13 @@ import {
   ScoreBadge,
   FreshnessFlag,
   ReferralBadge,
+  SourceBadge,
 } from "@/components/role-badges";
 import { PositioningPanel } from "@/components/PositioningPanel";
 import { ApplyButton } from "@/components/ApplyButton";
 import { ReferralApplyButton } from "@/components/ReferralApplyButton";
+import { ApplyOutButton } from "@/components/ApplyOutButton";
+import { sourceLabel } from "@/components/role-badges";
 
 export const dynamic = "force-dynamic";
 
@@ -62,6 +65,7 @@ export default async function RoleDetailPage({
           <ArchetypeTag archetype={role.archetype} />
           <FreshnessFlag isLive={role.is_live} checkedAt={role.freshness_checked_at} />
           {role.is_referral && <ReferralBadge />}
+          <SourceBadge source={role.source} />
         </div>
         <h1 className="mt-3 font-heading text-3xl font-extrabold tracking-tight text-ink sm:text-4xl">
           {role.title}
@@ -78,6 +82,8 @@ export default async function RoleDetailPage({
             ordinary roles use the anonymous compass_uid tracking (Stage 5). */}
         {role.is_referral ? (
           <ReferralApplyButton role={role} />
+        ) : role.apply_url ? (
+          <ApplyOutButton url={role.apply_url} source={sourceLabel(role.source)} />
         ) : (
           <ApplyButton roleId={role.id} />
         )}

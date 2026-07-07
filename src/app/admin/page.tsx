@@ -11,9 +11,12 @@ import {
   Plus,
   MessageSquare,
   Inbox,
+  RefreshCw,
 } from "lucide-react";
 import { useUser, isAdminEmail } from "@/lib/auth";
+import { supabase } from "@/lib/supabase";
 import { AuthNav } from "@/components/AuthNav";
+import type { IngestSummary } from "@/lib/ingest/types";
 import {
   ALL_ARCHETYPES,
   ARCHETYPE_LABELS,
@@ -75,6 +78,7 @@ export default function AdminPage() {
         />
       ) : (
         <div className="mt-6 space-y-8">
+          <SyncJobsPanel />
           <PostReferralForm />
           <ReferralOverview />
         </div>
@@ -106,6 +110,101 @@ function Gate({
         </Link>
       ) : null}
     </div>
+  );
+}
+
+// --- Stage 8: trigger a job sync ---------------------------------------------
+
+function SyncJobsPanel() {
+  const [state, setState] = useState<"idle" | "syncing" | "done" | "error">("idle");
+  const [summary, setSummary] = useState<IngestSummary | null>(null);
+  const [error, setError] = useState<string | null>(null);
+
+  async function sync() {
+    setState("syncing");
+    setError(null);
+    setSummary(null);
+    const { data } = await supabase.auth.getSession();
+    const token = data.session?.access_token;
+    if (!token) {
+      setError("Session expired — sign in again.");
+      setState("error");
+      return;
+    }
+    try {
+      const res = await fetch("/api/ingest", {
+        method: "POST",
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      const body = await res.json();
+      if (!res.ok) {
+        setError(body.error ?? "Sync failed.");
+        setState("error");
+        return;
+      }
+      setSummary(body as IngestSummary);
+      setState("done");
+    } catch {
+      setError("Network error — try again.");
+      setState("error");
+    }
+  }
+
+  return (
+    <section className="rounded-card border border-border bg-surface p-5 shadow-[var(--shadow-warm)] sm:p-6">
+      <h2 className="inline-flex items-center gap-2 font-heading text-lg font-bold text-ink">
+        <RefreshCw className="h-4 w-4 text-primary" aria-hidden />
+        Sync jobs
+      </h2>
+      <p className="mt-1 text-sm text-muted">
+        Pull PM roles from the configured Greenhouse, Lever, and Adzuna sources.
+        No AI credits used.
+      </p>
+
+      <button
+        type="button"
+        onClick={sync}
+        disabled={state === "syncing"}
+        className="mt-4 inline-flex min-h-[44px] items-center gap-2 rounded-btn bg-primary px-5 text-sm font-semibold text-white transition-colors hover:bg-primary-hover disabled:opacity-60"
+      >
+        {state === "syncing" ? (
+          <Loader2 className="h-4 w-4 animate-spin" aria-hidden />
+        ) : (
+          <RefreshCw className="h-4 w-4" aria-hidden />
+        )}
+        {state === "syncing" ? "Syncing…" : "Sync jobs now"}
+      </button>
+
+      {state === "error" && error ? (
+        <p className="mt-3 inline-flex items-center gap-1.5 text-sm font-medium text-danger">
+          <AlertTriangle className="h-4 w-4" aria-hidden />
+          {error}
+        </p>
+      ) : null}
+
+      {state === "done" && summary ? (
+        <div className="mt-4 rounded-card border border-border bg-surface-alt px-4 py-3 text-sm text-ink">
+          <p className="font-semibold">
+            <span className="text-success">{summary.added} added</span> ·{" "}
+            {summary.updated} updated · {summary.expired} expired
+          </p>
+          <p className="mt-1 text-xs text-muted">
+            Greenhouse {summary.bySource.greenhouse} · Lever{" "}
+            {summary.bySource.lever} · Adzuna {summary.bySource.adzuna}
+          </p>
+          {summary.errors.length > 0 ? (
+            <ul className="mt-2 space-y-1 text-xs text-accent">
+              {summary.errors.map((e, i) => (
+                <li key={i} className="inline-flex items-center gap-1.5">
+                  <AlertTriangle className="h-3.5 w-3.5" aria-hidden />
+                  {e}
+                </li>
+              ))}
+            </ul>
+          ) : null}
+        </div>
+      ) : null}
+    </section>
   );
 }
 

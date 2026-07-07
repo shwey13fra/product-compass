@@ -83,6 +83,29 @@ export function FreshnessFlag({
   );
 }
 
+// Stage 8 — provenance badge. 'seed' = illustrative sample data (deletable);
+// greenhouse/lever/adzuna = ingested from a live source.
+const SOURCE_META: Record<string, { label: string; cls: string }> = {
+  seed: { label: "Sample", cls: "bg-surface-alt text-muted" },
+  greenhouse: { label: "Greenhouse", cls: "bg-info-soft text-info" },
+  lever: { label: "Lever", cls: "bg-info-soft text-info" },
+  adzuna: { label: "Adzuna", cls: "bg-info-soft text-info" },
+};
+
+export function SourceBadge({ source }: { source: string | null }) {
+  const m = source ? SOURCE_META[source] : null;
+  if (!m) return null;
+  return (
+    <span className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-semibold ${m.cls}`}>
+      {m.label}
+    </span>
+  );
+}
+
+export function sourceLabel(source: string | null): string {
+  return source && SOURCE_META[source] ? SOURCE_META[source].label : "site";
+}
+
 // --- Stage 2.5 personalisation badges ---------------------------------------
 
 const FIT_META = {

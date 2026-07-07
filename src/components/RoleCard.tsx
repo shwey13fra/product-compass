@@ -9,6 +9,7 @@ import {
   FitTag,
   ReasonChip,
   ReferralBadge,
+  SourceBadge,
 } from "@/components/role-badges";
 
 // A single role as a clickable card. Whole card links to the detail view.
@@ -43,6 +44,7 @@ export function RoleCard({ role, match }: { role: Role; match?: MatchResult }) {
         <ScoreBadge score={role.real_pm_score} />
         <ArchetypeTag archetype={role.archetype} />
         {role.is_referral && <ReferralBadge />}
+        <SourceBadge source={role.source} />
       </div>
 
       <div className="mt-4 flex flex-col gap-2 border-t border-border pt-3 text-xs text-muted">
