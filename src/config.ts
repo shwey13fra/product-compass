@@ -15,3 +15,13 @@ export function isAdminEmail(email: string | null | undefined): boolean {
   const e = email.trim().toLowerCase();
   return ADMIN_EMAILS.some((a) => a.trim().toLowerCase() === e);
 }
+
+// Stage 8 — job ingestion sources. These board tokens are NOT secret (they
+// appear in public URLs). Add a company's token/slug here to include it in the
+// next admin "Sync jobs now". Adzuna keys are secret → server env only.
+export const GREENHOUSE_BOARDS: string[] = [
+  "stripe", // boards.greenhouse.io/stripe — many PM roles; smoke-test source
+];
+export const LEVER_COMPANIES: string[] = [
+  // e.g. "netflix" — from jobs.lever.co/{company}
+];
