@@ -16,6 +16,7 @@ import {
 import { useUser, isAdminEmail } from "@/lib/auth";
 import { supabase } from "@/lib/supabase";
 import { AuthNav } from "@/components/AuthNav";
+import { LastSyncCard } from "@/components/LastSyncCard";
 import type { IngestSummary } from "@/lib/ingest/types";
 import {
   ALL_ARCHETYPES,
@@ -214,6 +215,10 @@ function SyncJobsPanel() {
           ) : null}
         </div>
       ) : null}
+
+      {/* Durable last-run summary — survives reloads and shows the nightly cron's
+          results, not just a sync you triggered in this session. */}
+      <LastSyncCard />
     </section>
   );
 }
