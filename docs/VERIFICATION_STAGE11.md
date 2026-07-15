@@ -129,6 +129,12 @@ RPCs — the Stage 5 flow has to be re-confirmed.
 
 | # | Action | Expected | Actual |
 |---|--------|----------|--------|
+> **`/tracking` is the anonymous track — sign-in is irrelevant to it.** It is keyed
+> by `compass_uid`, never by the auth user. But `compass_uid` is **per origin**, so
+> an empty tracker on the lilac URL after testing on `localhost:3000` is *expected*,
+> not a regression. Judge prod by a **fresh Apply → view → reload** round-trip, not
+> by whether old rows appear.
+
 | c1 | Role → **Mark as Applied** | Green **Tracking · Applied** pill | ✅ (write path via `upsert_application`) |
 | c2 | `/tracking` → card listed | Real card, not empty state | ✅ |
 | c3 | Click **Seen** → **reload** | Still Seen (read path via `get_applications`) | ✅ evidenced by b4 (6 persisted rows incl. `seen`, `shared_with_hm`) |
@@ -153,7 +159,7 @@ expect HTTP 400 + `count` unchanged.
 
 | Step | What happened | Expected | Severity |
 |------|---------------|----------|----------|
-| a1 | Seeded the `owner_key` taken from `applications` (a **prod-origin** uid) but ran Position me on **localhost while signed in** → three different identities. Quota didn't fire; a real live call ran (~€0.003). | Refusal | **Not a code bug** — test-method error. `increment_ai_usage` behaved correctly throughout (0→1). Fixed by reading the metered identity back from `ai_usage` and seeding that. Recorded in `PAST_MISTAKES.md`. |
+| a1 | Seeded the uid from `applications.owner_key` — a **`compass_uid`** — but was **signed in**, so the route metered the **verified auth user id** instead. Different namespaces; the seed could never fire. Quota didn't refuse; a real live call ran (~€0.003). | Refusal | **Not a code bug** — test-method error. `increment_ai_usage` was correct throughout: `ai_usage` grew a *second* row under the auth id at `count = 1`. Fixed by reading the metered identity back and seeding that. Recorded in `PAST_MISTAKES.md`. |
 
 ## Parked (not Stage 11)
 
