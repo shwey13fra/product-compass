@@ -1,15 +1,22 @@
-// Stage 4 — LIVE positioning. Server-side ONLY: holds ANTHROPIC_API_KEY and
-// calls the Anthropic Messages API. The key is read from the server environment
-// and never sent to the browser. The manual paste-in path (Stage 3) stays as a
-// zero-credit fallback; this route is the live layer on top.
+// Stage 4/11 — LIVE positioning. Server-side ONLY: holds ANTHROPIC_API_KEY and
+// calls the Anthropic Messages API. The key never reaches the browser. The
+// manual paste-in path (Stage 3) stays a zero-credit, unlimited fallback.
 //
-// Credit-safe (€5 budget): cheap model + capped max_tokens + a per-process call
-// counter that hard-stops after MAX_CALLS and warns the client.
+// Stage 11 — budget protection is now DURABLE (survives cold starts), enforced
+// in Postgres via SECURITY DEFINER functions (anon key only, never service-role):
+//   * increment_ai_usage(identity, limit) — atomic monthly quota per identity
+//     (auth user id if signed in, else compass_uid). The client can't race/spoof it.
+//   * check_ip_rate(ip, limit) — coarse hourly IP backstop against compass_uid
+//     rotation (clearing localStorage for fresh quota).
+// Validation 400s consume NEITHER (they return before any counter is touched).
 
 import { NextResponse } from "next/server";
+import { createClient } from "@supabase/supabase-js";
 import type { Role } from "@/lib/types";
 import type { ExperienceProfile } from "@/lib/experience";
 import { buildPositioningPrompt, parseBrief } from "@/lib/positioning";
+import { supabase } from "@/lib/supabase";
+import { logError } from "@/lib/errors";
 
 export const runtime = "nodejs"; // need process.env (not the edge runtime)
 export const dynamic = "force-dynamic";
@@ -19,32 +26,56 @@ const MODEL = "claude-haiku-4-5";
 const MAX_TOKENS = 1024; // the brief is small (4 short fields) — keep it tight
 const ANTHROPIC_URL = "https://api.anthropic.com/v1/messages";
 
-// Per-process call counter — protects the €5 budget. Resets on cold start,
-// which is fine for a dev/demo guard. Override the cap with POSITION_CALL_CAP.
-const MAX_CALLS = Number(process.env.POSITION_CALL_CAP ?? 15);
-let callCount = 0;
+// Durable limits (config via server env). Monthly quota per identity; hourly cap
+// per IP as the rotation backstop.
+const MONTHLY_LIMIT = Number(process.env.AI_MONTHLY_LIMIT ?? 15);
+const IP_HOURLY_LIMIT = Number(process.env.AI_IP_HOURLY_LIMIT ?? 10);
 
 type Body = { role?: Partial<Role>; profile?: Partial<ExperienceProfile> };
 
+function clientIp(req: Request): string {
+  const fwd = req.headers.get("x-forwarded-for");
+  if (fwd) return fwd.split(",")[0].trim();
+  return (req.headers.get("x-real-ip") ?? "").trim();
+}
+
+// Identity for the monthly quota. Prefer the VERIFIED auth user id (so a
+// signed-in user can't be spoofed onto someone else's bucket); else the
+// compass_uid header; else fall back to the IP so metering always happens.
+async function resolveIdentity(req: Request, ip: string): Promise<string> {
+  const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
+  const anon = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+  const auth = req.headers.get("authorization");
+  if (auth && /^bearer /i.test(auth) && url && anon) {
+    try {
+      const token = auth.slice(7).trim();
+      const scoped = createClient(url, anon, {
+        auth: { persistSession: false, autoRefreshToken: false },
+        global: { headers: { Authorization: `Bearer ${token}` } },
+      });
+      const { data } = await scoped.auth.getUser();
+      if (data.user?.id) return data.user.id;
+    } catch {
+      // fall through to the anonymous identity
+    }
+  }
+  const uid = req.headers.get("x-compass-uid")?.trim();
+  return uid || (ip ? `ip:${ip}` : "");
+}
+
 export async function POST(req: Request) {
-  // --- validate input -------------------------------------------------------
+  // --- validate input (400s consume NOTHING) -------------------------------
   let body: Body;
   try {
     body = (await req.json()) as Body;
   } catch {
-    return NextResponse.json(
-      { ok: false, error: "Invalid request body." },
-      { status: 400 }
-    );
+    return NextResponse.json({ ok: false, error: "Invalid request body." }, { status: 400 });
   }
 
   const role = body.role;
   const profile = body.profile;
   if (!role?.company || !role?.title || !role?.archetype) {
-    return NextResponse.json(
-      { ok: false, error: "Missing role details." },
-      { status: 400 }
-    );
+    return NextResponse.json({ ok: false, error: "Missing role details." }, { status: 400 });
   }
   if (!profile?.experience || profile.experience.trim().length === 0) {
     return NextResponse.json(
@@ -53,22 +84,10 @@ export async function POST(req: Request) {
     );
   }
 
-  // --- guard the budget -----------------------------------------------------
-  if (callCount >= MAX_CALLS) {
-    return NextResponse.json(
-      {
-        ok: false,
-        limitReached: true,
-        error: `Live positioning is paused after ${MAX_CALLS} calls this session to protect the budget. Use the manual paste-in instead, or restart the server to reset.`,
-        callsRemaining: 0,
-      },
-      { status: 429 }
-    );
-  }
-
-  // --- key must exist server-side -------------------------------------------
+  // --- key must exist server-side (server misconfig → no consumption) -------
   const apiKey = process.env.ANTHROPIC_API_KEY;
   if (!apiKey) {
+    await logError("api/position", "missing ANTHROPIC_API_KEY", {});
     return NextResponse.json(
       {
         ok: false,
@@ -79,12 +98,82 @@ export async function POST(req: Request) {
     );
   }
 
+  const ip = clientIp(req);
+  const identity = await resolveIdentity(req, ip);
+
+  // --- IP rate backstop first (catches uid rotation before touching quota) --
+  try {
+    const { data, error } = await supabase.rpc("check_ip_rate", {
+      p_ip: ip,
+      p_limit: IP_HOURLY_LIMIT,
+    });
+    const row = Array.isArray(data) ? data[0] : data;
+    if (!error && row && row.allowed === false) {
+      return NextResponse.json(
+        {
+          ok: false,
+          rateLimited: true,
+          error:
+            "You're going a bit fast — too many live runs in the last hour. Wait a little, or use the manual paste-in (free).",
+          callsRemaining: null,
+        },
+        { status: 429 }
+      );
+    }
+    // On rpc error: fail OPEN (the monthly quota below is the real budget guard).
+    if (error) await logError("api/position", "check_ip_rate failed (fail-open)", {});
+  } catch {
+    await logError("api/position", "check_ip_rate threw (fail-open)", {});
+  }
+
+  // --- durable monthly quota (the real budget guard) ------------------------
+  let callsRemaining = 0;
+  try {
+    const { data, error } = await supabase.rpc("increment_ai_usage", {
+      p_identity: identity,
+      p_limit: MONTHLY_LIMIT,
+    });
+    if (error) {
+      // Fail CLOSED: if we can't verify the quota, don't spend uncapped credit.
+      await logError("api/position", "increment_ai_usage failed (fail-closed)", {});
+      return NextResponse.json(
+        {
+          ok: false,
+          error:
+            "Live positioning is briefly unavailable (usage check failed). The manual paste-in is free — use that.",
+          callsRemaining: 0,
+        },
+        { status: 503 }
+      );
+    }
+    const row = Array.isArray(data) ? data[0] : data;
+    callsRemaining = row?.remaining ?? 0;
+    if (!row || row.allowed === false) {
+      return NextResponse.json(
+        {
+          ok: false,
+          limitReached: true,
+          error: `You've used all ${MONTHLY_LIMIT} live positionings this month. The manual paste-in is free and unlimited — use that, or come back next month.`,
+          callsRemaining: 0,
+        },
+        { status: 429 }
+      );
+    }
+  } catch {
+    await logError("api/position", "increment_ai_usage threw (fail-closed)", {});
+    return NextResponse.json(
+      {
+        ok: false,
+        error: "Live positioning is briefly unavailable. Use the manual paste-in (free).",
+        callsRemaining: 0,
+      },
+      { status: 503 }
+    );
+  }
+
   const prompt = buildPositioningPrompt(role as Role, profile as ExperienceProfile);
 
-  // --- call Anthropic -------------------------------------------------------
-  callCount += 1; // count the attempt so a hammered endpoint still hits the cap
-  const callsRemaining = Math.max(0, MAX_CALLS - callCount);
-
+  // --- call Anthropic (quota already consumed for this attempt) -------------
   let res: Response;
   try {
     res = await fetch(ANTHROPIC_URL, {
@@ -101,6 +190,7 @@ export async function POST(req: Request) {
       }),
     });
   } catch {
+    await logError("api/position", "anthropic fetch failed (network)", {});
     return NextResponse.json(
       { ok: false, error: "Couldn't reach the model. Try again or paste in manually.", callsRemaining },
       { status: 502 }
@@ -116,6 +206,7 @@ export async function POST(req: Request) {
         : status === 429
         ? "Anthropic rate-limited the request — wait a moment."
         : "The model request failed.";
+    await logError("api/position", "anthropic non-ok response", { status });
     return NextResponse.json({ ok: false, error: hint, callsRemaining }, { status: 502 });
   }
 
@@ -125,6 +216,7 @@ export async function POST(req: Request) {
   };
 
   if (data.stop_reason === "refusal") {
+    await logError("api/position", "anthropic refusal", {});
     return NextResponse.json(
       { ok: false, error: "The model declined this request. Try the manual paste-in.", callsRemaining },
       { status: 502 }
@@ -139,6 +231,9 @@ export async function POST(req: Request) {
 
   const parsed = parseBrief(text);
   if (!parsed.ok) {
+    // Log the parser's reason only — NOT the model text (derived from the user's
+    // experience → potential PII).
+    await logError("api/position", "unparseable model output", { reason: parsed.error });
     return NextResponse.json(
       { ok: false, error: `Model returned unparseable output: ${parsed.error}`, callsRemaining },
       { status: 502 }

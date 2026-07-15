@@ -1,7 +1,8 @@
-// Stage 5 — application status tracking, keyed by compass_uid (owner_key).
-// Persists to the Supabase `applications` table (see scripts/applications-table.sql).
-// v1 has no auth: rows are filtered by owner_key client-side — filtering, not
-// isolation. Store nothing sensitive here.
+// Stage 5/11 — application status tracking, keyed by compass_uid (owner_key).
+// Stage 11: the `applications` table is now RLS deny-all; ALL access goes through
+// SECURITY DEFINER functions that REQUIRE the owner_key (see
+// scripts/stage11-ai-quota-and-rls.sql). Real isolation — you can only touch rows
+// whose secret uid you already hold; enumeration is impossible.
 
 import { supabase } from "@/lib/supabase";
 import type { Role } from "@/lib/types";
@@ -46,9 +47,6 @@ export function nextStatus(s: ApplicationStatus): ApplicationStatus | null {
   return i >= 0 && i < STATUS_STEPS.length - 1 ? STATUS_STEPS[i + 1].key : null;
 }
 
-const COLUMNS =
-  "id,owner_key,role_id,status,status_changed_at,created_at,updated_at";
-
 export type ApplicationsResult =
   | { ok: true; applications: Application[] }
   | { ok: false; error: string };
@@ -56,11 +54,11 @@ export type ApplicationsResult =
 export async function getApplicationsForOwner(
   ownerKey: string
 ): Promise<ApplicationsResult> {
-  const { data, error } = await supabase
-    .from("applications")
-    .select(COLUMNS)
-    .eq("owner_key", ownerKey)
-    .order("updated_at", { ascending: false });
+  // RLS deny-all → read via the SECURITY DEFINER function, which returns only
+  // rows for the exact owner_key we supply.
+  const { data, error } = await supabase.rpc("get_applications", {
+    p_uid: ownerKey,
+  });
 
   if (error) return { ok: false, error: error.message };
   return { ok: true, applications: (data ?? []) as Application[] };
@@ -74,66 +72,55 @@ export async function getApplication(
   ownerKey: string,
   roleId: string
 ): Promise<ApplicationResult> {
-  const { data, error } = await supabase
-    .from("applications")
-    .select(COLUMNS)
-    .eq("owner_key", ownerKey)
-    .eq("role_id", roleId)
-    .maybeSingle();
+  const { data, error } = await supabase.rpc("get_application", {
+    p_uid: ownerKey,
+    p_role: roleId,
+  });
 
   if (error) return { ok: false, error: error.message };
-  return { ok: true, application: (data as Application) ?? null };
+  const rows = (data ?? []) as Application[];
+  return { ok: true, application: rows[0] ?? null };
 }
 
-// Upsert the status for (owner_key, role_id). Always re-stamps status_changed_at
-// + updated_at so the follow-up nudge measures time since the last change.
+// Upsert the status for (owner_key, role_id). The function re-stamps
+// status_changed_at + updated_at so the follow-up nudge measures time since the
+// last change.
 export async function setStatus(
   ownerKey: string,
   roleId: string,
   status: ApplicationStatus
 ): Promise<ApplicationResult> {
-  const now = new Date().toISOString();
-  const { data, error } = await supabase
-    .from("applications")
-    .upsert(
-      {
-        owner_key: ownerKey,
-        role_id: roleId,
-        status,
-        status_changed_at: now,
-        updated_at: now,
-      },
-      { onConflict: "owner_key,role_id" }
-    )
-    .select(COLUMNS)
-    .single();
+  const { data, error } = await supabase.rpc("upsert_application", {
+    p_uid: ownerKey,
+    p_role: roleId,
+    p_status: status,
+  });
 
   if (error) return { ok: false, error: error.message };
-  return { ok: true, application: data as Application };
+  const rows = (data ?? []) as Application[];
+  if (!rows[0]) return { ok: false, error: "Save returned no row." };
+  return { ok: true, application: rows[0] };
 }
 
 // Demo affordance: shift status_changed_at back by `days` (keeps status) so the
 // time-based "Seen" nudge can be seen without waiting real days or editing SQL.
-// Only status_changed_at moves — updated_at is left alone so list order is stable.
+// The function shifts the STORED status_changed_at server-side; updated_at is
+// left alone so list order is stable.
 export async function backdateStatusChange(
   ownerKey: string,
   roleId: string,
-  fromIso: string,
   days: number
 ): Promise<ApplicationResult> {
-  const shifted = new Date(
-    new Date(fromIso).getTime() - days * 86_400_000
-  ).toISOString();
-  const { data, error } = await supabase
-    .from("applications")
-    .update({ status_changed_at: shifted })
-    .eq("owner_key", ownerKey)
-    .eq("role_id", roleId)
-    .select(COLUMNS)
-    .single();
+  const { data, error } = await supabase.rpc("backdate_application", {
+    p_uid: ownerKey,
+    p_role: roleId,
+    p_days: days,
+  });
 
   if (error) return { ok: false, error: error.message };
-  return { ok: true, application: data as Application };
+  const rows = (data ?? []) as Application[];
+  if (!rows[0]) return { ok: false, error: "No application to backdate." };
+  return { ok: true, application: rows[0] };
 }
 
 // --- Follow-up nudge (pure JS) ----------------------------------------------

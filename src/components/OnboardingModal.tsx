@@ -17,6 +17,7 @@ import {
   insightText,
   emptyPreferences,
 } from "@/lib/preferences";
+import { track } from "@/lib/analytics";
 
 // Optional onboarding questionnaire. Never blocks the app: the parent renders
 // the full list underneath, and this offers a "Browse all roles instead" exit.
@@ -70,6 +71,7 @@ export function OnboardingModal({ initial, mode, onSave, onSkip }: Props) {
       location,
       genuineOnly,
     };
+    track("onboarding_completed");
     onSave(prefs);
   };
 

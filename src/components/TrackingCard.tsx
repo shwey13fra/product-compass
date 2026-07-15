@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { Bell, AlertTriangle, ArrowRight, Compass, FastForward } from "lucide-react";
 import type { Role } from "@/lib/types";
@@ -17,6 +17,7 @@ import {
 import { getSimilarLiveRoles } from "@/lib/roles";
 import { StatusStrip } from "@/components/StatusStrip";
 import { WarmPathIntro } from "@/components/WarmPathIntro";
+import { track } from "@/lib/analytics";
 
 // One tracked role: header + status strip + follow-up nudge + warm/cold hint +
 // (when Closed) 3–4 similar live roles. Owns this role's application state and
@@ -42,6 +43,15 @@ export function TrackingCard({
   const nudge = computeFollowUpNudge(app, role);
   const isClosed = app.status === "closed";
 
+  // Fire nudge_shown once, the first time the follow-up nudge becomes visible.
+  const nudgeTracked = useRef(false);
+  useEffect(() => {
+    if (nudge && !nudgeTracked.current) {
+      nudgeTracked.current = true;
+      track("nudge_shown", { role_id: role.id });
+    }
+  }, [nudge, role.id]);
+
   // When the role is Closed, surface 3–4 similar live roles to move on to.
   useEffect(() => {
     if (!isClosed) {
@@ -64,11 +74,13 @@ export function TrackingCard({
   async function handleChange(next: ApplicationStatus) {
     setBusy(true);
     setError(null);
+    const from = app.status;
     const res = await setStatus(ownerKey, role.id, next);
     if (!res.ok || !res.application) {
       setError(res.ok ? "Could not save." : res.error);
     } else {
       setApp(res.application);
+      track("status_changed", { from, to: next });
     }
     setBusy(false);
   }
@@ -78,7 +90,7 @@ export function TrackingCard({
   async function simulateWeek() {
     setBusy(true);
     setError(null);
-    const res = await backdateStatusChange(ownerKey, role.id, app.status_changed_at, 7);
+    const res = await backdateStatusChange(ownerKey, role.id, 7);
     if (!res.ok || !res.application) {
       setError(res.ok ? "Could not save." : res.error);
     } else {

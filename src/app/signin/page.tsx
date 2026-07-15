@@ -12,6 +12,7 @@ import {
   ArrowLeft,
 } from "lucide-react";
 import { signInWithEmail, verifyEmailOtp } from "@/lib/auth";
+import { track } from "@/lib/analytics";
 
 function SignInForm() {
   const router = useRouter();
@@ -45,6 +46,8 @@ function SignInForm() {
     setError(null);
     const res = await verifyEmailOtp(email, code);
     if (res.ok) {
+      // No email/PII in the event (docs/METRICS.md).
+      track("sign_in");
       // Session is set — go where they were headed (admins land on /roles and
       // then see the Admin link in the header).
       router.replace(next);

@@ -28,6 +28,7 @@ import {
 } from "@/lib/referrals";
 import { statusLabel, type ApplicationStatus } from "@/lib/applications";
 import { getRoleById } from "@/lib/roles";
+import { track } from "@/lib/analytics";
 import type { Role } from "@/lib/types";
 
 export default function ReferralThreadPage() {
@@ -104,9 +105,11 @@ export default function ReferralThreadPage() {
     if (!app || !user) return;
     setBusy(true);
     setError(null);
+    const from = app.status;
     const res = await setReferralStatus(app.id, next);
     if (res.ok) {
       setApp(res.data);
+      track("status_changed", { from, to: next });
       if (isParticipant) markRead(app.id, user.id);
     } else {
       setError(res.error);
@@ -119,6 +122,8 @@ export default function ReferralThreadPage() {
     const res = await addComment(app.id, user.id, user.email ?? null, body);
     if (res.ok) {
       setComments((prev) => [...(prev ?? []), res.data]);
+      // No message content in the event — PII rule (docs/METRICS.md).
+      track("referral_thread_message", { role_id: app.role_id });
       markRead(app.id, user.id);
     } else {
       setError(res.error);

@@ -10,6 +10,8 @@ import {
   statusLabel,
   type ApplicationStatus,
 } from "@/lib/applications";
+import { loadBrief } from "@/lib/positioning";
+import { track } from "@/lib/analytics";
 
 // Role-detail CTA: "Mark as Applied". Once applied, it flips to a confirmation
 // that links to /tracking (the strip + nudges live there). Persists to Supabase
@@ -47,6 +49,8 @@ export function ApplyButton({ roleId }: { roleId: string }) {
       setError(res.ok ? "Could not save." : res.error);
     } else {
       setStatusState(res.application.status);
+      // had_brief powers "% of applications sent with a brief" (docs/METRICS.md).
+      track("applied", { role_id: roleId, had_brief: loadBrief(roleId) !== null });
     }
     setBusy(false);
   }

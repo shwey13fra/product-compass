@@ -19,6 +19,7 @@ import {
   SourceBadge,
 } from "@/components/role-badges";
 import { PositioningPanel } from "@/components/PositioningPanel";
+import { TrackEvent } from "@/components/TrackEvent";
 import { ApplyButton } from "@/components/ApplyButton";
 import { ReferralApplyButton } from "@/components/ReferralApplyButton";
 import { ApplyOutButton } from "@/components/ApplyOutButton";
@@ -57,6 +58,7 @@ export default async function RoleDetailPage({
 
   return (
     <main className="mx-auto w-full max-w-3xl flex-1 px-4 py-8 sm:px-6 sm:py-12">
+      <TrackEvent name="role_viewed" props={{ role_id: role.id }} />
       <BackLink />
 
       {/* Header */}

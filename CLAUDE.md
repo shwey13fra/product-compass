@@ -29,11 +29,11 @@ Next.js (App Router) + TypeScript + Tailwind + lucide-react, deployed live on **
 
 ## AI (hybrid, credit-safe)
 Positioning runs **server-side in a Next.js route handler** (`app/api/position/route.ts`) holding the key — never the client. **Build the manual paste-in fallback first** (must work with zero credits), then wire the live call on top. JSON-only output; never fabricate or keyword-stuff; change portrayal not facts; address credibility gaps head-on.
-Model: dev/validate `claude-haiku-4-5` · demo `claude-sonnet-4-6`. `POST api.anthropic.com/v1/messages`, header `anthropic-version: 2023-06-01`. Cap max_tokens + per-session call counter (€5 budget).
+Model: dev/validate `claude-haiku-4-5` · demo `claude-sonnet-4-6`. `POST api.anthropic.com/v1/messages`, header `anthropic-version: 2023-06-01`. Cap max_tokens. **Budget (€5) is durable**: monthly quota per identity (auth id, else compass_uid) via `SECURITY DEFINER increment_ai_usage` (`AI_MONTHLY_LIMIT`=15) + hourly per-IP backstop `check_ip_rate` (`AI_IP_HOURLY_LIMIT`=10). Validation-400s consume neither; quota-check failure fails **closed** (manual still free). No per-process counter.
 
 ## Data (no-auth v1)
 roles (seeded, shared): company, title, archetype, real_pm_score, real_pm_signals[], is_live, freshness_checked_at, location, jd_text, crowd_response_days, has_warm_path, warm_path_note.
-applications + briefs: keyed by `owner_key`. status: applied|seen|shared_with_hm|shortlisted|closed. archetype: ai|growth|technical|platform|b2b|b2c|zero_to_one.
+applications: keyed by `owner_key`; **RLS deny-all**, accessed only via `SECURITY DEFINER` RPCs that require the uid (real isolation — no enumeration). briefs: localStorage. status: applied|seen|shared_with_hm|shortlisted|closed. archetype: ai|growth|technical|platform|b2b|b2c|zero_to_one.
 real-PM score 0–100: **+** owns discovery / what & why / an outcome metric · **−** delivery / coordination / ticket throughput. Bands: 70+ genuine · 40–69 verify · 0–39 disguised.
 
 ## Design — "Warm Clay" (Tailwind tokens; never hardcode hex)
@@ -44,7 +44,7 @@ Type: Inter (UI) + Plus Jakarta Sans (headings). Radius: cards 14 / buttons 10 /
 ## Quality bar
 Handle every state: loading / empty / error / success. Validate at boundaries. Mobile-first, 44px targets, confirm destructive actions, toast feedback, <2s load. Extract at 3+ duplicates; decompose >500-line files.
 Design vocab: "premium" = bigger type contrast + whitespace · "AI slop" = make a bolder, more specific choice.
-Security (non-negotiable): Anthropic key NEVER in client/repo — server env only (Vercel env). Supabase anon key only, never service-role. v1 has no RLS → store nothing sensitive (add auth + RLS in v2). `.env.local` out of git; commit `.env.example`.
+Security (non-negotiable): Anthropic key NEVER in client/repo — server env only (Vercel env). Supabase anon key only, never service-role — enforce quota/isolation with `SECURITY DEFINER` fns + RLS, not a privileged key. `applications` is RLS deny-all (uid-scoped RPCs); referral tables auth-RLS (Stage 7); `events`/`errors`/`ai_usage`/`ip_rate_limits` are write-only to the client. `.env.local` out of git; commit `.env.example`.
 Ship check: what breaks at scale? at zero? with malice? can we undo it?
 
 ## Portfolio standard

@@ -47,7 +47,14 @@ export async function getRoleById(id: string): Promise<RoleResult> {
     .eq("id", id)
     .maybeSingle();
 
-  if (error) return { ok: false, error: error.message };
+  if (error) {
+    // A malformed id (not a valid uuid) can never match a role — Postgres raises
+    // 22P02 (invalid_text_representation). Treat it as "not found" so the clean
+    // not-found page renders instead of leaking the raw DB error to the UI.
+    if (error.code === "22P02" || /invalid input syntax for type uuid/i.test(error.message))
+      return { ok: false, error: "Role not found", notFound: true };
+    return { ok: false, error: error.message };
+  }
   if (!data) return { ok: false, error: "Role not found", notFound: true };
   return { ok: true, role: data as Role };
 }

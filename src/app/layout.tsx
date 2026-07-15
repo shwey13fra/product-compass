@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { Inter, Plus_Jakarta_Sans } from "next/font/google";
+import { Analytics } from "@vercel/analytics/next";
 import "./globals.css";
 import { APP_NAME } from "@/config";
 
@@ -31,7 +32,11 @@ export default function RootLayout({
       lang="en"
       className={`${inter.variable} ${jakarta.variable} h-full antialiased`}
     >
-      <body className="min-h-full flex flex-col">{children}</body>
+      <body className="min-h-full flex flex-col">
+        {children}
+        {/* Vercel Analytics — free page-level traffic (no cookies, no PII). */}
+        <Analytics />
+      </body>
     </html>
   );
 }

@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import {
   Compass,
   Pencil,
@@ -38,6 +38,9 @@ import {
   type StoredBrief,
 } from "@/lib/positioning";
 import { ExperienceForm } from "@/components/ExperienceForm";
+import { track } from "@/lib/analytics";
+import { getCompassUid } from "@/lib/compass-uid";
+import { supabase } from "@/lib/supabase";
 
 // Stage 4 (LIVE + MANUAL): set up experience → "Position me" calls the
 // server-side route (which holds the Anthropic key) and auto-fills the brief.
@@ -81,9 +84,18 @@ export function PositioningPanel({ role }: { role: Role }) {
     setLoading(true);
     setLiveError(null);
     try {
+      // Identity for the durable monthly quota: compass_uid always; the auth
+      // token too if signed in (the server prefers the verified user id).
+      const headers: Record<string, string> = { "content-type": "application/json" };
+      const uid = getCompassUid();
+      if (uid) headers["x-compass-uid"] = uid;
+      const { data: sess } = await supabase.auth.getSession();
+      const token = sess.session?.access_token;
+      if (token) headers["Authorization"] = `Bearer ${token}`;
+
       const res = await fetch("/api/position", {
         method: "POST",
-        headers: { "content-type": "application/json" },
+        headers,
         body: JSON.stringify({ role, profile }),
       });
       const data = (await res.json()) as {
@@ -103,6 +115,7 @@ export function PositioningPanel({ role }: { role: Role }) {
       setStored(s);
       setReposing(false);
       setPrompt(null);
+      track("brief_generated", { mode: "live", role_id: role.id });
     } catch {
       setLiveError("Network error reaching the model. Try again or paste in manually.");
     } finally {
@@ -133,6 +146,7 @@ export function PositioningPanel({ role }: { role: Role }) {
     setPrompt(null);
     setPaste("");
     setReposing(false);
+    track("brief_generated", { mode: "manual", role_id: role.id });
   }
 
   function handleReposition() {
@@ -144,6 +158,15 @@ export function PositioningPanel({ role }: { role: Role }) {
   const ready = isExperienceReady(profile);
   // Fit read is derived purely from JD vs experience — show it as soon as we can.
   const fit: FitRead | null = ready && profile ? computeFitRead(role, profile) : null;
+
+  // Fire fit_read_shown once, when the fit read first becomes visible for this role.
+  const fitTracked = useRef(false);
+  useEffect(() => {
+    if (fit && !fitTracked.current) {
+      fitTracked.current = true;
+      track("fit_read_shown", { role_id: role.id });
+    }
+  }, [fit, role.id]);
   // Show the action chooser when there's no saved brief yet, or the user asked
   // to re-position — but not while the manual prompt or a live call is active.
   const showActions = !prompt && !loading && (!stored || reposing);
@@ -394,8 +417,8 @@ function PositionActions({
       {lowOnCalls && (
         <p className="text-xs font-medium text-accent">
           {callsRemaining === 0
-            ? "Live positioning is used up this session — use the manual paste-in."
-            : `${callsRemaining} live ${callsRemaining === 1 ? "run" : "runs"} left this session.`}
+            ? "Live positioning is used up this month — use the manual paste-in."
+            : `${callsRemaining} live ${callsRemaining === 1 ? "run" : "runs"} left this month.`}
         </p>
       )}
       <p className="text-xs text-muted">
@@ -496,6 +519,21 @@ function BriefView({
   onReposition: () => void;
 }) {
   const { brief } = stored;
+  // Plain-text rendering of the brief so a PM can paste it straight into an
+  // application / notes. Powers the brief_copied event.
+  const briefText = [
+    brief.lead_story ? `LEAD STORY\n${brief.lead_story}` : "",
+    brief.reangled_metrics.length
+      ? `RE-ANGLED METRICS\n${brief.reangled_metrics.map((m) => `- ${m}`).join("\n")}`
+      : "",
+    brief.background.length
+      ? `WHAT TO BACKGROUND\n${brief.background.map((m) => `- ${m}`).join("\n")}`
+      : "",
+    brief.pitch_60s ? `60-SECOND PITCH\n${brief.pitch_60s}` : "",
+  ]
+    .filter(Boolean)
+    .join("\n\n");
+
   return (
     <div className="rounded-card border border-success/30 bg-success-soft/40 p-4 sm:p-5">
       <div className="flex items-center justify-between gap-3">
@@ -503,14 +541,21 @@ function BriefView({
           <Check className="h-4 w-4 text-success" aria-hidden />
           Your positioning brief
         </h3>
-        <button
-          type="button"
-          onClick={onReposition}
-          className="inline-flex items-center gap-1.5 rounded-btn px-2.5 py-1.5 text-xs font-semibold text-muted transition-colors hover:bg-surface hover:text-primary"
-        >
-          <RotateCcw className="h-3.5 w-3.5" aria-hidden />
-          Re-position
-        </button>
+        <div className="flex items-center gap-2">
+          <CopyButton
+            text={briefText}
+            label="Copy brief"
+            onCopied={() => track("brief_copied", { role_id: stored.roleId })}
+          />
+          <button
+            type="button"
+            onClick={onReposition}
+            className="inline-flex items-center gap-1.5 rounded-btn px-2.5 py-1.5 text-xs font-semibold text-muted transition-colors hover:bg-surface hover:text-primary"
+          >
+            <RotateCcw className="h-3.5 w-3.5" aria-hidden />
+            Re-position
+          </button>
+        </div>
       </div>
 
       <div className="mt-4 space-y-4">
@@ -596,7 +641,15 @@ function Empty() {
 
 // --- Copy button -------------------------------------------------------------
 
-function CopyButton({ text }: { text: string }) {
+function CopyButton({
+  text,
+  label = "Copy",
+  onCopied,
+}: {
+  text: string;
+  label?: string;
+  onCopied?: () => void;
+}) {
   const [copied, setCopied] = useState(false);
 
   async function copy() {
@@ -612,6 +665,7 @@ function CopyButton({ text }: { text: string }) {
       document.body.removeChild(ta);
     }
     setCopied(true);
+    onCopied?.();
     setTimeout(() => setCopied(false), 1800);
   }
 
@@ -629,7 +683,7 @@ function CopyButton({ text }: { text: string }) {
       ) : (
         <>
           <Copy className="h-3.5 w-3.5" aria-hidden />
-          Copy
+          {label}
         </>
       )}
     </button>

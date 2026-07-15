@@ -19,6 +19,8 @@ import {
   type ReferralApplication,
 } from "@/lib/referrals";
 import { statusLabel } from "@/lib/applications";
+import { loadBrief } from "@/lib/positioning";
+import { track } from "@/lib/analytics";
 
 // Referral roles require sign-in to apply. Applying creates a SHARED application
 // linking this referee to the role's tagged referrer (a private thread + status
@@ -63,6 +65,7 @@ export function ReferralApplyButton({ role }: { role: Role }) {
       setBusy(false);
       return;
     }
+    track("applied", { role_id: role.id, had_brief: loadBrief(role.id) !== null });
     router.push(`/referrals/${res.data.id}`);
   }
 
