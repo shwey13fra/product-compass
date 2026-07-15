@@ -3,7 +3,7 @@
 // client so writes pass the roles admin-write RLS.
 
 import type { SupabaseClient } from "@supabase/supabase-js";
-import type { RawJob, IngestSummary, JobSource } from "./types";
+import type { RawJob, IngestSummary, JobSource, SourceStat, ExistingRole } from "./types";
 import { isPmTitle, normalizeJob } from "./normalize";
 import { fetchAllSources } from "./sources";
 
@@ -32,9 +32,45 @@ export function dedupe(jobs: RawJob[]): RawJob[] {
   return out;
 }
 
-export function classifyExpiry(existingIngestedIds: string[], freshIds: string[]): string[] {
+// Ids to flip is_live=false: live rows absent from this pull, EXCLUDING every
+// source in skipSources. A failed pull has an empty fresh set, so without the
+// skip we would delist an entire source on a transient outage (the Stage 8 bug).
+// Already-dead rows are left alone so the `expired` count stays honest.
+export function classifyExpiry(
+  existing: ExistingRole[],
+  freshIds: string[],
+  skipSources: JobSource[]
+): string[] {
   const fresh = new Set(freshIds);
-  return existingIngestedIds.filter((id) => !fresh.has(id));
+  const skip = new Set(skipSources);
+  return existing
+    .filter((r) => r.is_live && !skip.has(r.source) && !fresh.has(r.id))
+    .map((r) => r.id);
+}
+
+// Decide which sources must NOT be expired this run, and why.
+//   * ok === false      → the fetch failed; absence proves nothing.
+//   * fetched === 0 but the source still has live rows → a 200 with an empty
+//     list (board rename, API shape change) is likelier than a board genuinely
+//     emptying. Prefer stale-and-visible over silent data loss.
+export function computeSkipSources(
+  bySource: Record<JobSource, SourceStat>,
+  previouslyLive: Record<JobSource, number>
+): { skip: JobSource[]; warnings: string[] } {
+  const skip: JobSource[] = [];
+  const warnings: string[] = [];
+  for (const source of Object.keys(bySource) as JobSource[]) {
+    const stat = bySource[source];
+    const live = previouslyLive[source] ?? 0;
+    if (!stat.ok) {
+      skip.push(source);
+      warnings.push(`${source}: fetch failed — expiry skipped (${live} live rows kept)`);
+    } else if (stat.fetched === 0 && live > 0) {
+      skip.push(source);
+      warnings.push(`${source}: 0 jobs returned but ${live} live — expiry skipped, check the source`);
+    }
+  }
+  return { skip, warnings };
 }
 
 const INGESTED_SOURCES: JobSource[] = ["greenhouse", "lever", "adzuna"];
