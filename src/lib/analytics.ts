@@ -26,7 +26,8 @@ export type EventName =
   | "nudge_shown" // { role_id }
   | "referral_thread_message" // { role_id }
   | "onboarding_completed"
-  | "sign_in";
+  | "sign_in"
+  | "ingest_run"; // { trigger, added, updated, expired, sources_ok, sources_failed }
 
 export function track(
   name: EventName,
@@ -51,4 +52,20 @@ export function track(
       // Fire-and-forget: swallow everything. Analytics must never surface an error.
     }
   })();
+}
+
+// Server-side sibling of track(). track() no-ops when `window` is undefined, so
+// calling it from a route handler or a cron would silently record NOTHING —
+// instrumentation that never fires, behind a dashboard you'd trust. Mirrors
+// logError: direct insert, never throws, no browser context (uid/user_id null).
+// PII rule unchanged: counts/enums/booleans only — never company names or JD text.
+export async function trackServer(
+  name: EventName,
+  props: Record<string, unknown> = {}
+): Promise<void> {
+  try {
+    await supabase.from("events").insert({ uid: null, user_id: null, name, props });
+  } catch {
+    // Instrumentation must never break the request it reports on.
+  }
 }
