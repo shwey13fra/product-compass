@@ -10,9 +10,14 @@ import { fetchAllSources } from "./sources";
 const SOURCE_ORDER: Record<JobSource, number> = { greenhouse: 0, lever: 1, adzuna: 2 };
 
 // Dedupe by (source:external_id), then cross-source by company|title|location.
-// ATS sources (greenhouse, lever) win over Adzuna when the same job appears twice.
+// The richest JD wins; ties fall back to source rank (ATS over aggregators), so
+// equal-length descriptions stay deterministic rather than input-order dependent.
 export function dedupe(jobs: RawJob[]): RawJob[] {
-  const sorted = [...jobs].sort((a, b) => SOURCE_ORDER[a.source] - SOURCE_ORDER[b.source]);
+  const sorted = [...jobs].sort((a, b) => {
+    const byRichness = (b.jd_text?.length ?? 0) - (a.jd_text?.length ?? 0);
+    if (byRichness !== 0) return byRichness;
+    return SOURCE_ORDER[a.source] - SOURCE_ORDER[b.source];
+  });
   const seenId = new Set<string>();
   const seenKey = new Set<string>();
   const out: RawJob[] = [];
