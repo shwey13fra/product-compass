@@ -2,7 +2,7 @@
 // Parsers are pure (unit-tested). Fetchers are best-effort: a failing source
 // returns an error string but never throws, so one bad source can't kill a sync.
 
-import type { RawJob } from "./types";
+import type { RawJob, JobSource } from "./types";
 import { GREENHOUSE_BOARDS, LEVER_COMPANIES } from "@/config";
 
 const ADZUNA_MAX = 50; // cost-safety cap (one query, <= 50 rows)
@@ -134,18 +134,41 @@ export async function fetchAdzuna(): Promise<FetchResult> {
   }
 }
 
-// Fetch every configured source, collecting jobs and per-source errors.
-export async function fetchAllSources(): Promise<{ jobs: RawJob[]; errors: string[] }> {
-  const results = await Promise.all([
-    ...GREENHOUSE_BOARDS.map((t) => fetchGreenhouse(t)),
-    ...LEVER_COMPANIES.map((c) => fetchLever(c)),
-    fetchAdzuna(),
-  ]);
+// Fetch every configured source, collecting jobs, per-source errors, and
+// per-source health. A source is ok ONLY if every fetch for it succeeded — one
+// dead greenhouse board marks greenhouse not-ok, so expiry conservatively skips
+// it rather than delisting that board's roles. Health is tracked structurally
+// rather than by substring-matching the flat `errors` list.
+export async function fetchAllSources(): Promise<{
+  jobs: RawJob[];
+  errors: string[];
+  sourceOk: Record<JobSource, boolean>;
+}> {
+  const tagged: { source: JobSource; result: FetchResult }[] = [
+    ...(await Promise.all(
+      GREENHOUSE_BOARDS.map(async (t) => ({
+        source: "greenhouse" as const,
+        result: await fetchGreenhouse(t),
+      }))
+    )),
+    ...(await Promise.all(
+      LEVER_COMPANIES.map(async (c) => ({
+        source: "lever" as const,
+        result: await fetchLever(c),
+      }))
+    )),
+    { source: "adzuna" as const, result: await fetchAdzuna() },
+  ];
+
   const jobs: RawJob[] = [];
   const errors: string[] = [];
-  for (const r of results) {
-    jobs.push(...r.jobs);
-    if (r.error) errors.push(r.error);
+  const sourceOk: Record<JobSource, boolean> = { greenhouse: true, lever: true, adzuna: true };
+  for (const { source, result } of tagged) {
+    jobs.push(...result.jobs);
+    if (result.error) {
+      errors.push(result.error);
+      sourceOk[source] = false;
+    }
   }
-  return { jobs, errors };
+  return { jobs, errors, sourceOk };
 }

@@ -76,28 +76,36 @@ export function computeSkipSources(
 const INGESTED_SOURCES: JobSource[] = ["greenhouse", "lever", "adzuna"];
 
 export async function runIngest(client: SupabaseClient): Promise<IngestSummary> {
-  const bySource: Record<JobSource, number> = { greenhouse: 0, lever: 0, adzuna: 0 };
+  // 1) Fetch + filter to PM titles. Count per source BEFORE dedupe: `fetched`
+  //    answers "did this source return anything?", which is what the circuit
+  //    breaker needs — a dedupe drop is not a source failure.
+  const { jobs: rawJobs, errors, sourceOk } = await fetchAllSources();
+  const pmJobs = rawJobs.filter((j) => j.title && isPmTitle(j.title) && j.apply_url);
 
-  // 1) Fetch + filter to PM titles + dedupe.
-  const { jobs: rawJobs, errors } = await fetchAllSources();
-  const pmJobs = dedupe(rawJobs.filter((j) => j.title && isPmTitle(j.title) && j.apply_url));
+  const bySource: Record<JobSource, SourceStat> = {
+    greenhouse: { fetched: 0, ok: sourceOk.greenhouse },
+    lever: { fetched: 0, ok: sourceOk.lever },
+    adzuna: { fetched: 0, ok: sourceOk.adzuna },
+  };
+  for (const j of pmJobs) bySource[j.source].fetched += 1;
 
-  // 2) Normalize to Role rows.
+  // 2) Dedupe + normalize to Role rows.
   const now = new Date();
-  const rows = pmJobs.map((j) => {
-    bySource[j.source] += 1;
-    return normalizeJob(j, now);
-  });
+  const rows = dedupe(pmJobs).map((j) => normalizeJob(j, now));
   const freshIds = rows.map((r) => r.id);
 
-  // 3) Figure out which ingested ids already exist (added vs updated).
+  // 3) Existing ingested rows. `source` drives per-source expiry; `is_live`
+  //    feeds the circuit breaker and stops us re-expiring dead rows.
   const { data: existingRows, error: exErr } = await client
     .from("roles")
-    .select("id")
+    .select("id, source, is_live")
     .in("source", INGESTED_SOURCES);
   if (exErr) errors.push(`read existing: ${exErr.message}`);
-  const existingIngestedIds = (existingRows ?? []).map((r: { id: string }) => r.id);
-  const existingSet = new Set(existingIngestedIds);
+  const existing: ExistingRole[] = (existingRows ?? []) as ExistingRole[];
+  const existingSet = new Set(existing.map((r) => r.id));
+
+  const previouslyLive: Record<JobSource, number> = { greenhouse: 0, lever: 0, adzuna: 0 };
+  for (const r of existing) if (r.is_live) previouslyLive[r.source] += 1;
 
   // 4) Upsert the fresh rows (RLS: admin JWT on `client`). Only count
   //    added/updated (and run the expire pass) if the write actually succeeded —
@@ -116,10 +124,13 @@ export async function runIngest(client: SupabaseClient): Promise<IngestSummary> 
     }
   }
 
-  // 5) Expire ingested rows missing from this pull. NEVER touches seed/referral
-  //    rows — the .in("source", INGESTED_SOURCES) filter excludes source='seed'.
-  //    Skip if the upsert failed (this pull didn't persist).
-  const toExpire = upsertOk ? classifyExpiry(existingIngestedIds, freshIds) : [];
+  // 5) Expire ingested rows missing from this pull — per source, and NEVER for a
+  //    source we can't trust this run (failed fetch, or a suspicious zero). NEVER
+  //    touches seed/referral rows: the .in("source", INGESTED_SOURCES) filter
+  //    above excludes source='seed'. Skip entirely if the upsert failed (this
+  //    pull didn't persist).
+  const { skip, warnings } = computeSkipSources(bySource, previouslyLive);
+  const toExpire = upsertOk ? classifyExpiry(existing, freshIds, skip) : [];
   let expired = 0;
   if (toExpire.length > 0) {
     const { error: expErr } = await client
@@ -130,5 +141,5 @@ export async function runIngest(client: SupabaseClient): Promise<IngestSummary> 
     else expired = toExpire.length;
   }
 
-  return { added, updated, expired, bySource, errors };
+  return { added, updated, expired, bySource, errors, warnings };
 }
