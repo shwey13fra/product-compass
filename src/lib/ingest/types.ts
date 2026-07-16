@@ -13,10 +13,18 @@ export type RawJob = {
   apply_url: string;
 };
 
+// Per-source health for one ingest run. `fetched` counts PM-filtered jobs
+// BEFORE dedupe — it answers "did this source return anything?".
+export type SourceStat = { fetched: number; ok: boolean };
+
+// The subset of an existing `roles` row that expiry decisions need.
+export type ExistingRole = { id: string; source: JobSource; is_live: boolean };
+
 export type IngestSummary = {
   added: number;
   updated: number;
   expired: number;
-  bySource: Record<JobSource, number>;
+  bySource: Record<JobSource, SourceStat>;
   errors: string[];
+  warnings: string[];
 };

@@ -5,6 +5,8 @@ import { NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
 import { isAdminEmail } from "@/config";
 import { runIngest } from "@/lib/ingest/pipeline";
+import { writeSyncRun } from "@/lib/ingest/syncRuns";
+import { trackServer } from "@/lib/analytics";
 
 export const dynamic = "force-dynamic";
 
@@ -38,10 +40,18 @@ export async function POST(req: Request) {
 
   try {
     const summary = await runIngest(client);
-    return NextResponse.json(summary);
+    const run_id = await writeSyncRun(client, "manual", summary);
+    await trackServer("ingest_run", {
+      trigger: "manual",
+      added: summary.added,
+      updated: summary.updated,
+      expired: summary.expired,
+      sources_ok: Object.values(summary.bySource).filter((s) => s.ok).length,
+      sources_failed: Object.values(summary.bySource).filter((s) => !s.ok).length,
+    });
+    return NextResponse.json({ run_id, ...summary });
   } catch {
     // Never echo keys or raw upstream bodies.
     return NextResponse.json({ error: "Ingest failed. Check server logs." }, { status: 500 });
   }
-  // TODO(v2): Vercel Cron for automatic daily sync (crons in vercel config).
 }

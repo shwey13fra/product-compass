@@ -16,6 +16,7 @@ import {
 import { useUser, isAdminEmail } from "@/lib/auth";
 import { supabase } from "@/lib/supabase";
 import { AuthNav } from "@/components/AuthNav";
+import { LastSyncCard } from "@/components/LastSyncCard";
 import type { IngestSummary } from "@/lib/ingest/types";
 import {
   ALL_ARCHETYPES,
@@ -189,9 +190,19 @@ function SyncJobsPanel() {
             {summary.updated} updated · {summary.expired} expired
           </p>
           <p className="mt-1 text-xs text-muted">
-            Greenhouse {summary.bySource.greenhouse} · Lever{" "}
-            {summary.bySource.lever} · Adzuna {summary.bySource.adzuna}
+            Greenhouse {summary.bySource.greenhouse.fetched} · Lever{" "}
+            {summary.bySource.lever.fetched} · Adzuna {summary.bySource.adzuna.fetched}
           </p>
+          {summary.warnings.length > 0 ? (
+            <ul className="mt-2 space-y-1 rounded-btn border border-accent/30 bg-accent-soft px-2.5 py-1.5 text-xs text-ink">
+              {summary.warnings.map((w, i) => (
+                <li key={i} className="inline-flex items-center gap-1.5">
+                  <AlertTriangle className="h-3.5 w-3.5 shrink-0 text-accent" aria-hidden />
+                  {w}
+                </li>
+              ))}
+            </ul>
+          ) : null}
           {summary.errors.length > 0 ? (
             <ul className="mt-2 space-y-1 text-xs text-accent">
               {summary.errors.map((e, i) => (
@@ -204,6 +215,10 @@ function SyncJobsPanel() {
           ) : null}
         </div>
       ) : null}
+
+      {/* Durable last-run summary — survives reloads and shows the nightly cron's
+          results, not just a sync you triggered in this session. */}
+      <LastSyncCard />
     </section>
   );
 }
