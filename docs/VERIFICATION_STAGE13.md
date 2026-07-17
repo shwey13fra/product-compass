@@ -9,8 +9,9 @@
 > 4. **The note text never reaches `events`** — no PII.
 > 5. **A brief saved before Stage 13 still opens** and reports mode `unknown`.
 >
-> **Run status: 🟡 code complete, NOTHING live-verified. Every Actual below is
-> unfilled on purpose.** Blocked on §0.
+> **Run status: 🟢 migration run + §a isolation PASSED (2026-07-17, live anon key).
+> RPC-level §b logic also proven from the terminal.** Remaining: §c–f are
+> browser/login steps for the user; then merge + deploy + verify on prod.
 
 ---
 
@@ -52,13 +53,21 @@ curl.exe -s -X POST "$URL/rest/v1/rpc/get_brief_feedback" -H "apikey: $KEY" -H "
 
 | # | Leg | Expected | **Actual** |
 |---|-----|----------|-----------|
-| a1 | **CONTROL** `roles` select | a row → the key works | ⬜ not run |
-| a2 | **ATTACK** `brief_feedback` select | `[]` → invisible | ⬜ not run |
-| a3 | **ATTACK** direct insert | denied (`42501`) → RLS is the gate | ⬜ not run |
-| a4 | **APP PATH** `rpc/rate_brief` | the row returns → the door works | ⬜ not run |
-| a5 | **ATTACK** `rpc/get_brief_feedback` with a uid you hold | returns only that uid's row; **no RPC lists uids**, so holding a uid is the only way in | ⬜ not run |
+| a1 | **CONTROL** `roles` select | a row → the key works | ✅ `[{"id":"d721d57a…"}]` `200` |
+| a2 | **ATTACK** `brief_feedback` select | `[]` → invisible | ✅ `[]` `200` — meaningful *because* a1 returned a row |
+| a3 | **ATTACK** direct insert | denied (`42501`) → RLS is the gate | ✅ `42501 new row violates row-level security policy` `401` |
+| a4 | **APP PATH** `rpc/rate_brief` | the row returns → the door works | ✅ the created row (`test-uid-1`) returned |
+| a5 | **ATTACK** `rpc/get_brief_feedback` with a uid you hold | returns only that uid's row | ✅ exactly one row |
+| a5b | **TRUE ATTACK** query a **different** uid (`test-uid-2`) | `[]` — holding uid-1 gives no access to another uid | ✅ `[]` — no enumeration |
 
-Cleanup afterwards: `delete from public.brief_feedback where uid = 'test-uid-1';`
+Also proven at the RPC level from the terminal (no browser needed):
+- **b3/b4 note lifecycle:** thumbs-down with note `"lead story felt generic"` saved; switching to thumbs-up **cleared the note to null** ✅ (a stale complaint can't survive a mind-change).
+- **validation:** `rate_brief` with `p_rating:"meh"` → `P0001 invalid rating`, no row written ✅ (the RPC is the boundary, not just the UI).
+- **report_brief_used insert path:** for a never-rated role → `rating: null, used_in_application: true, brief_mode: unknown` ✅ (this is why `rating` is nullable and why `p_mode` is an argument).
+
+> **Cleanup — the user must run this in the SQL editor** (RLS blocks deleting via
+> the anon key, by design):
+> `delete from public.brief_feedback where uid in ('test-uid-1','test-uid-2');`
 
 ## b. Rating persists ⬜ NOT RUN
 
