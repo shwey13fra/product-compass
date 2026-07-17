@@ -39,6 +39,7 @@ import {
   type StoredBrief,
 } from "@/lib/positioning";
 import { ExperienceForm } from "@/components/ExperienceForm";
+import { BriefFeedback } from "@/components/BriefFeedback";
 import { track } from "@/lib/analytics";
 import { getCompassUid } from "@/lib/compass-uid";
 import { supabase } from "@/lib/supabase";
@@ -112,7 +113,7 @@ export function PositioningPanel({ role }: { role: Role }) {
       }
       const fit = computeFitRead(role, profile);
       const raw = JSON.stringify(data.brief, null, 2);
-      const s = saveBrief(role.id, data.brief, fit, raw);
+      const s = saveBrief(role.id, data.brief, fit, raw, "live");
       setStored(s);
       setReposing(false);
       setPrompt(null);
@@ -141,7 +142,7 @@ export function PositioningPanel({ role }: { role: Role }) {
     }
     if (!profile) return;
     const fit = computeFitRead(role, profile);
-    const s = saveBrief(role.id, result.brief, fit, paste);
+    const s = saveBrief(role.id, result.brief, fit, paste, "manual");
     setStored(s);
     setParseError(null);
     setPrompt(null);
@@ -204,7 +205,14 @@ export function PositioningPanel({ role }: { role: Role }) {
           {fit && <FitReadView fit={fit} role={role} />}
 
           {/* Saved brief, if any */}
-          {stored && <BriefView stored={stored} onReposition={handleReposition} />}
+          {stored && (
+            <div>
+              <BriefView stored={stored} onReposition={handleReposition} />
+              {/* Stage 13: did this brief actually land? `mode` is undefined for
+                  briefs saved before this stage → reported as 'unknown'. */}
+              <BriefFeedback roleId={role.id} mode={stored.mode} />
+            </div>
+          )}
 
           {/* Live call in progress */}
           {loading && (

@@ -66,6 +66,11 @@ export function ReferralApplyButton({ role }: { role: Role }) {
       return;
     }
     track("applied", { role_id: role.id, had_brief: loadBrief(role.id) !== null });
+    // Stage 13: no "did you use the brief?" prompt on this path — we redirect to
+    // the thread immediately (below), so a prompt would unmount before it was
+    // seen. Covering the warm path means putting the question on /referrals/[id].
+    // /admin/quality therefore labels its usage rate cold-path only.
+    // TODO(v2): prompt on the thread page once referral volume justifies it.
     router.push(`/referrals/${res.data.id}`);
   }
 

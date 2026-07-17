@@ -314,6 +314,11 @@ export async function adminCreateReferralRole(
       jd_text: role.jd_text?.trim() || null,
       referrer_email: role.referrer_email.trim().toLowerCase(),
       is_referral: true,
+      // Explicit, not defaulted: `source` has no DB default, so omitting it wrote
+      // NULL — and Stage 8's `update roles set source='seed' where source is null`
+      // then swept referral roles into the seed bucket, where the documented
+      // cleanup (`delete from roles where source='seed'`) would have deleted them.
+      source: "referral",
       is_live: true,
       has_warm_path: true,
       freshness_checked_at: new Date().toISOString(),

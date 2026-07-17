@@ -224,6 +224,11 @@ export type StoredBrief = {
   fit: FitRead;
   rawJson: string; // what the user pasted, so they can re-open/edit
   savedAt: string; // ISO
+  // Stage 13. OPTIONAL, and the version stays 1 ON PURPOSE: loadBrief guards on
+  // `version !== 1`, so bumping it would make every already-saved brief
+  // unreadable — silent data loss on every device. Briefs saved before Stage 13
+  // have no mode and report 'unknown' to brief_feedback rather than a guess.
+  mode?: "live" | "manual";
 };
 
 const briefKey = (roleId: string) => `compass_brief:${roleId}`;
@@ -245,7 +250,8 @@ export function saveBrief(
   roleId: string,
   brief: Brief,
   fit: FitRead,
-  rawJson: string
+  rawJson: string,
+  mode?: "live" | "manual"
 ): StoredBrief {
   const stored: StoredBrief = {
     version: 1,
@@ -254,6 +260,7 @@ export function saveBrief(
     fit,
     rawJson,
     savedAt: new Date().toISOString(),
+    mode,
   };
   if (typeof window !== "undefined") {
     window.localStorage.setItem(briefKey(roleId), JSON.stringify(stored));

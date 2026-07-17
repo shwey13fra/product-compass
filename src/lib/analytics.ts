@@ -21,6 +21,8 @@ export type EventName =
   | "fit_read_shown"
   | "brief_generated" // { mode: "live" | "manual", role_id }
   | "brief_copied" // { role_id }
+  | "brief_rated" // { role_id, mode, rating } — NEVER the note text (PII)
+  | "brief_used_reported" // { role_id, used }
   | "applied" // { role_id, had_brief: boolean }
   | "status_changed" // { from, to }
   | "nudge_shown" // { role_id }
