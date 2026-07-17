@@ -79,6 +79,12 @@ export default function AdminPage() {
         />
       ) : (
         <div className="mt-6 space-y-8">
+          <Link
+            href="/admin/quality"
+            className="inline-flex items-center gap-1.5 text-sm font-semibold text-primary transition-colors hover:text-primary-hover"
+          >
+            Brief quality →
+          </Link>
           <SyncJobsPanel />
           <PostReferralForm />
           <ReferralOverview />
