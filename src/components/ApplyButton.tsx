@@ -10,8 +10,9 @@ import {
   statusLabel,
   type ApplicationStatus,
 } from "@/lib/applications";
-import { loadBrief } from "@/lib/positioning";
+import { loadBrief, type StoredBrief } from "@/lib/positioning";
 import { track } from "@/lib/analytics";
+import { BriefUsedPrompt } from "@/components/BriefUsedPrompt";
 
 // Role-detail CTA: "Mark as Applied". Once applied, it flips to a confirmation
 // that links to /tracking (the strip + nudges live there). Persists to Supabase
@@ -21,6 +22,9 @@ export function ApplyButton({ roleId }: { roleId: string }) {
   const [status, setStatusState] = useState<ApplicationStatus | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // Stage 13: set only right after a successful apply, so the prompt asks once
+  // rather than on every visit to an already-applied role.
+  const [askUsed, setAskUsed] = useState<StoredBrief | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -49,8 +53,12 @@ export function ApplyButton({ roleId }: { roleId: string }) {
       setError(res.ok ? "Could not save." : res.error);
     } else {
       setStatusState(res.application.status);
+      const savedBrief = loadBrief(roleId);
       // had_brief powers "% of applications sent with a brief" (docs/METRICS.md).
-      track("applied", { role_id: roleId, had_brief: loadBrief(roleId) !== null });
+      track("applied", { role_id: roleId, had_brief: savedBrief !== null });
+      // Stage 13: had_brief says a brief EXISTED; this asks whether it was USED.
+      // The gap between those two numbers is the point of /admin/quality.
+      if (savedBrief) setAskUsed(savedBrief);
     }
     setBusy(false);
   }
@@ -63,18 +71,27 @@ export function ApplyButton({ roleId }: { roleId: string }) {
 
   if (status) {
     return (
-      <div className="mt-4 flex flex-wrap items-center justify-between gap-3 rounded-card border border-success/30 bg-success-soft/50 px-4 py-3">
-        <p className="inline-flex items-center gap-2 text-sm font-semibold text-ink">
-          <CheckCircle2 className="h-4 w-4 text-success" aria-hidden />
-          Tracking · {statusLabel(status)}
-        </p>
-        <Link
-          href="/tracking"
-          className="inline-flex items-center gap-1.5 text-sm font-semibold text-primary transition-colors hover:text-primary-hover"
-        >
-          View in Tracking
-          <ArrowRight className="h-4 w-4" aria-hidden />
-        </Link>
+      <div className="mt-4">
+        <div className="flex flex-wrap items-center justify-between gap-3 rounded-card border border-success/30 bg-success-soft/50 px-4 py-3">
+          <p className="inline-flex items-center gap-2 text-sm font-semibold text-ink">
+            <CheckCircle2 className="h-4 w-4 text-success" aria-hidden />
+            Tracking · {statusLabel(status)}
+          </p>
+          <Link
+            href="/tracking"
+            className="inline-flex items-center gap-1.5 text-sm font-semibold text-primary transition-colors hover:text-primary-hover"
+          >
+            View in Tracking
+            <ArrowRight className="h-4 w-4" aria-hidden />
+          </Link>
+        </div>
+        {askUsed && (
+          <BriefUsedPrompt
+            roleId={roleId}
+            mode={askUsed.mode}
+            onDone={() => setAskUsed(null)}
+          />
+        )}
       </div>
     );
   }
