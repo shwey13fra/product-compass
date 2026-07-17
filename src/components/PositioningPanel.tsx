@@ -18,6 +18,7 @@ import {
   AlertTriangle,
   ClipboardPaste,
   ArrowLeft,
+  X,
 } from "lucide-react";
 import type { Role } from "@/lib/types";
 import { archetypeLabel } from "@/lib/types";
@@ -294,7 +295,61 @@ const FIT_TONE = {
   danger: { badge: "bg-danger-soft text-danger", bar: "bg-danger" },
 } as const;
 
+// The JD was too thin to measure against (computeFitRead returned matchPct null).
+// We say so rather than render a number one keyword decided — a fabricated 10%
+// is worse than an honest "can't tell", and this IS the fabrication the product
+// exists to prevent.
+function ThinJdRead({ fit, role }: { fit: FitRead; role: Role }) {
+  const jdLen = (role.jd_text ?? "").trim().length;
+  return (
+    <div className="rounded-card border border-border bg-surface p-4">
+      <div className="flex items-center justify-between gap-3">
+        <h3 className="inline-flex items-center gap-2 font-heading text-sm font-bold text-ink">
+          <Target className="h-4 w-4 text-muted" aria-hidden />
+          Fit read
+        </h3>
+        <span className="rounded-full bg-surface-alt px-3 py-1 text-xs font-medium text-muted">
+          not enough to score
+        </span>
+      </div>
+
+      <p className="mt-3 text-sm text-ink">
+        This listing gives us{" "}
+        {jdLen > 0 ? `only ${jdLen} characters of` : "no"} job description — too
+        little to measure your experience against honestly.
+      </p>
+      <p className="mt-1 text-xs text-muted">
+        We&apos;d rather tell you that than invent a number. Open the full
+        posting to judge it yourself.
+      </p>
+
+      <div className="mt-3">
+        <p className="text-xs font-semibold uppercase tracking-wide text-muted">
+          What we can tell you
+        </p>
+        <ul className="mt-1.5 space-y-1">
+          <li className="flex items-start gap-1.5 text-sm text-ink">
+            <Check className="mt-0.5 h-3.5 w-3.5 shrink-0 text-success" aria-hidden />
+            It&apos;s a {archetypeLabel(role.archetype)} role
+          </li>
+          <li className="flex items-start gap-1.5 text-sm text-ink">
+            {fit.archetypeAligned ? (
+              <Check className="mt-0.5 h-3.5 w-3.5 shrink-0 text-success" aria-hidden />
+            ) : (
+              <X className="mt-0.5 h-3.5 w-3.5 shrink-0 text-muted" aria-hidden />
+            )}
+            {fit.archetypeAligned
+              ? "That matches the archetype you're targeting"
+              : "That isn't the archetype you're targeting"}
+          </li>
+        </ul>
+      </div>
+    </div>
+  );
+}
+
 function FitReadView({ fit, role }: { fit: FitRead; role: Role }) {
+  if (fit.matchPct === null) return <ThinJdRead fit={fit} role={role} />;
   const toneKey: keyof typeof FIT_TONE =
     fit.matchPct >= 70 ? "success" : fit.matchPct >= 45 ? "accent" : "danger";
   const tone = FIT_TONE[toneKey];
