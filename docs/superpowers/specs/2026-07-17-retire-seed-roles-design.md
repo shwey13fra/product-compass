@@ -1,6 +1,11 @@
-# Stage 13 — Retire the seed sample roles
+# Retire the seed sample roles — PARKED (design approved, not scheduled)
 
-> **Status:** design approved 2026-07-17.
+> **Status:** design approved 2026-07-17, then **parked**. Stage 13 became brief
+> feedback (`2026-07-17-brief-feedback-design.md`); this is unscheduled and ready
+> to run whenever. Its two **root fixes** (`adminCreateReferralRole` sets
+> `source='referral'`; the booby-trapped comment at `stage8-job-ingestion.sql:14`)
+> were pulled forward INTO Stage 13 — so by the time this runs, that trap is
+> already closed. **The 48-row retirement itself is all that remains here.**
 > **Why now:** Stage 8 tagged the 50 curated roles `source='seed'` and badged them
 > "Sample", with the explicit decision *"delete later once ingestion works"*
 > (`DECISIONS.md`, 2026-07-07). Nightly ingestion started running unattended on
