@@ -10,8 +10,21 @@ alter table public.roles
   add column if not exists apply_url    text,
   add column if not exists ingested_at  timestamptz;
 
--- Tag the 50 illustrative sample rows so they are badged "Sample" now and
--- deletable later with:  delete from public.roles where source = 'seed';
+-- Tag the 50 illustrative sample rows so they are badged "Sample" now.
+--
+-- ⚠️ RETIRING THEM LATER: do NOT run `delete from public.roles where source='seed'`.
+-- That predicate ALSO matches the Stage 7 REFERRAL role — it was created before
+-- this backfill, so the line below swept it into 'seed' — and the delete would
+-- silently take the warm path with it. Nothing would error.
+-- Prefer a soft retire, the pattern the ingest pipeline already uses ("the bot
+-- never deletes: expiry flips is_live=false and keeps history" —
+-- scripts/stage12-cron-ingestion.sql):
+--   update public.roles set is_live = false
+--    where source = 'seed' and is_live = true and is_referral is not true;
+-- See docs/superpowers/specs/2026-07-17-retire-seed-roles-design.md.
+--
+-- (Stage 13 fixed the generator: adminCreateReferralRole now sets
+--  source='referral' explicitly, so new referral roles never land here.)
 update public.roles set source = 'seed' where source is null;
 
 -- Dedupe/upsert key for ingested rows (seed rows have null external_id).
