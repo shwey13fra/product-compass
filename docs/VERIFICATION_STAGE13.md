@@ -9,9 +9,15 @@
 > 4. **The note text never reaches `events`** — no PII.
 > 5. **A brief saved before Stage 13 still opens** and reports mode `unknown`.
 >
-> **Run status: 🟢 migration run + §a isolation PASSED (2026-07-17, live anon key).
-> RPC-level §b logic also proven from the terminal.** Remaining: §c–f are
-> browser/login steps for the user; then merge + deploy + verify on prod.
+> **Run status: 🟢 SUBSTANTIVELY DONE — deployed to prod (`main` @ `3f08d7a`).**
+> The load-bearing claims pass live: **§a** isolation (three-leg, anon key), **§d1**
+> no-PII (`brief_rated` props are ids+enums only), **§b1** the rate path fires
+> end-to-end, **§e1** `/admin/quality` renders for an admin. RPC-level note-clear /
+> validation / insert-path proven from the terminal (§b3/b4). **Left, all UI
+> confirmation of already-proven logic:** §b2 reload-persistence, §c the apply
+> prompt (+ its `brief_used_reported` event, §d2), §e2 non-admin gate, §f the
+> legacy-brief render (unit-tested; not testable on this device — no pre-Stage-13
+> brief in this browser's localStorage).
 
 ---
 
@@ -73,8 +79,8 @@ Also proven at the RPC level from the terminal (no browser needed):
 
 | # | Action | Expected | **Actual** |
 |---|--------|----------|-----------|
-| b1 | Generate a brief, click 👍 | "Thanks" appears | ⬜ not run |
-| b2 | Reload the role page | 👍 still selected (read back via `get_brief_feedback`, not localStorage) | ⬜ not run |
+| b1 | Generate a brief, click 👍 | "Thanks" appears | ✅ live, prod — proven by the `brief_rated` event firing (§d1) |
+| b2 | Reload the role page | 👍 still selected (read back via `get_brief_feedback`, not localStorage) | ⬜ not confirmed |
 | b3 | Click 👎, type a note, blur | note saves | ⬜ not run |
 | b4 | Switch back to 👍 | note is **cleared** (`rate_brief` nulls it — a stale complaint must not survive the user changing their mind) | ⬜ not run |
 
@@ -98,14 +104,14 @@ select name, props, created_at from public.events
 
 | # | Check | Expected | **Actual** |
 |---|-------|----------|-----------|
-| d1 | `brief_rated` props | `{role_id, mode, rating}` — **no note text** | ⬜ not run |
-| d2 | `brief_used_reported` props | `{role_id, used}` | ⬜ not run |
+| d1 | `brief_rated` props | `{role_id, mode, rating}` — **no note text** | ✅ live, prod: `{"mode":"live","rating":"thumbs_up","role_id":"456e402c-…"}` — ids + enums only, no PII |
+| d2 | `brief_used_reported` props | `{role_id, used}` | ⬜ not yet fired (needs an apply on a role with a brief) |
 
 ## e. `/admin/quality` ⬜ NOT RUN
 
 | # | Action | Expected | **Actual** |
 |---|--------|----------|-----------|
-| e1 | As an admin | counts by mode, usage rate, recent notes | ⬜ not run |
+| e1 | As an admin | counts by mode, usage rate, recent notes | ✅ live, prod: page renders (user-confirmed) — the `is_admin()` select policy reads the table |
 | e2 | Signed out / non-admin | "Admins only" — **and** the query returns nothing even if the gate were bypassed, because the `select` policy requires `is_admin()` | ⬜ not run |
 
 ## f. The legacy brief ⬜ NOT RUN — the data-loss guard
