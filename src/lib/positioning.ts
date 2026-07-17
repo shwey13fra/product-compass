@@ -146,36 +146,63 @@ const THEMES: Theme[] = [
   { id: "b2c", label: "Consumer / B2C", keywords: ["b2c", "consumer", "mobile app", "engagement", "viral", "dau", "mau"] },
 ];
 
+// Keywords match at a WORD START, never mid-word. A plain `includes` let the
+// two-letter "ai" fire on "f-ai-led", "em-ai-l", "m-ai-ntain" and "dom-ai-n",
+// so a payments PM was told they had AI experience — the exact fabrication this
+// product exists to avoid. Long keywords stay PREFIX matches on purpose, so
+// "interview" still catches "interviews" and "prioriti" catches "prioritisation";
+// short ones also need a closing boundary, or "ai" would still match "aim"/"aid".
+const escapeRe = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+const RE_CACHE = new Map<string, RegExp>();
+function keywordRe(k: string): RegExp {
+  let re = RE_CACHE.get(k);
+  if (!re) {
+    re = new RegExp(k.length <= 3 ? `\\b${escapeRe(k)}s?\\b` : `\\b${escapeRe(k)}`);
+    RE_CACHE.set(k, re);
+  }
+  return re;
+}
+
 function hasAny(text: string, keywords: string[]): boolean {
-  return keywords.some((k) => text.includes(k));
+  return keywords.some((k) => keywordRe(k).test(text));
 }
 
 export type FitRead = {
-  matchPct: number; // rough 0–100
+  // null = the JD is too thin to score honestly. NOT 0, and never a guess:
+  // callers must render the low-confidence state instead of a number.
+  matchPct: number | null;
   covered: string[]; // JD themes the candidate already evidences
   framable: string[]; // the "framable 30%" — JD themes not yet covered
   archetypeAligned: boolean;
 };
+
+// A fit read is only honest when the JD gives us enough to measure against.
+// The old code fell back to the ROLE ARCHETYPE's single theme, which made the
+// denominator 1 — so the score could only be 0/1 or 1/1. On Zerodha's 131-char
+// Kite listing that meant a rich payments PM scored 10% ("Nothing detected yet")
+// while an experience of the single word "dau" scored 95%. Below this floor we
+// say we can't tell, and ask for the full JD.
+const MIN_JD_THEMES = 3;
 
 export function computeFitRead(role: Role, p: ExperienceProfile): FitRead {
   const jd = `${role.title} ${role.jd_text ?? ""}`.toLowerCase();
   const exp = `${p.headline} ${p.experience}`.toLowerCase();
 
   const jdThemes = THEMES.filter((t) => hasAny(jd, t.keywords));
-  // If the JD is too thin to detect themes, fall back to the role archetype.
-  const themesToCheck = jdThemes.length > 0 ? jdThemes : THEMES.filter((t) => t.id === role.archetype);
+  const archetypeAligned = p.archetype === role.archetype;
+
+  if (jdThemes.length < MIN_JD_THEMES) {
+    return { matchPct: null, covered: [], framable: [], archetypeAligned };
+  }
 
   const covered: string[] = [];
   const framable: string[] = [];
-  for (const t of themesToCheck) {
+  for (const t of jdThemes) {
     if (hasAny(exp, t.keywords)) covered.push(t.label);
     else framable.push(t.label);
   }
 
-  const archetypeAligned = p.archetype === role.archetype;
-
-  const total = themesToCheck.length;
-  const base = total > 0 ? (covered.length / total) * 100 : 50;
+  const base = (covered.length / jdThemes.length) * 100;
   // Small nudge for archetype alignment, clamped to a sensible band.
   const raw = base + (archetypeAligned ? 8 : 0);
   const matchPct = Math.max(10, Math.min(95, Math.round(raw)));
