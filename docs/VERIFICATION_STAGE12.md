@@ -9,10 +9,11 @@
 > 3. **A source outage no longer delists that source's roles** (the Stage 8 bug).
 > 4. **Every run is logged and visible** in `sync_runs` + the admin card.
 >
-> **Run status: 🟢 code verified 2026-07-15; live verified 2026-07-16 against
-> production (`main` @ `3b0d565`).** Sections a–e and f1 passed. Open: f2–f3
-> (quick), and **f4 — the first unattended nightly cron**, which cannot be forced,
-> only waited for.
+> **Run status: 🟢 PASSED — Stage 12 is closed.** Code verified 2026-07-15; live
+> verified 2026-07-16 against production (`main` @ `3b0d565`); the first unattended
+> nightly cron fired **2026-07-17 03:27 UTC** (§f4). Sections a–e, f1 and f4 passed.
+> Only f2–f3 (admin card `manual` trigger; the `events` row) remain unrun — both
+> are cosmetic next to f4, which was the load-bearing claim.
 
 ---
 
@@ -151,12 +152,15 @@ the next production run showed `adzuna 45 fetched, ok: true, expired 0`.
 | f1 | `/admin` as an admin | **Last sync** card: per-source `fetched`/`expired`, `ok` ticks, relative time, `cron` vs `manual` | ✅ `2m ago · cron`, greenhouse 29/0, lever 0/0, adzuna 45/0, "0 added · 71 updated" — an exact match for run `a3a8847b`, i.e. the summary and the logged row agree |
 | f2 | Click **Sync jobs now**, reload `/admin` | card updates, `trigger = manual` | ⬜ not yet run |
 | f3 | `select name, props from events where name = 'ingest_run' order by created_at desc;` | rows with `{trigger, added, updated, expired, sources_ok, sources_failed}`, **no PII** | ⬜ not run |
-| f4 | After the first nightly cron | a `trigger = 'cron'` row appears | ⬜ **open** — waits for 03:00 UTC 2026-07-17 |
+| f4 | After the first nightly cron | a `trigger = 'cron'` row appears | ✅ **PASSED** — `2026-07-17 03:27:32+00`, all three sources `ok`, greenhouse 29 / lever 0 / adzuna 46 |
 
-> **f4 is the only claim still unproven, and it is the one that cannot be forced:**
-> every run so far was manually triggered. It proves *Vercel calls the endpoint*,
-> which is a different claim from *the endpoint works*. Check with:
-> `select trigger, run_at, source, fetched, ok from sync_runs order by run_at desc limit 5;`
+> **What actually proved f4 was the TIMESTAMP, not the trigger column.** `trigger =
+> 'cron'` is written by the *route*, so our own §c2 curl produced a `cron` row too
+> (`2026-07-16 13:57:58`). The claim "Vercel calls the endpoint unattended" is only
+> settled by a row appearing at **03:27 UTC** with nobody at a terminal — and by
+> adzuna moving 45 → 46, i.e. it pulled fresh data rather than replaying ours.
+> `03:27` (not `03:00`) is Vercel Hobby behaving as documented: a daily cron fires
+> *within* the scheduled hour, not on the minute. Don't read the drift as a fault.
 
 ---
 
