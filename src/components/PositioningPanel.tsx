@@ -112,7 +112,7 @@ export function PositioningPanel({ role }: { role: Role }) {
       }
       const fit = computeFitRead(role, profile);
       const raw = JSON.stringify(data.brief, null, 2);
-      const s = saveBrief(role.id, data.brief, fit, raw);
+      const s = saveBrief(role.id, data.brief, fit, raw, "live");
       setStored(s);
       setReposing(false);
       setPrompt(null);
@@ -141,7 +141,7 @@ export function PositioningPanel({ role }: { role: Role }) {
     }
     if (!profile) return;
     const fit = computeFitRead(role, profile);
-    const s = saveBrief(role.id, result.brief, fit, paste);
+    const s = saveBrief(role.id, result.brief, fit, paste, "manual");
     setStored(s);
     setParseError(null);
     setPrompt(null);
