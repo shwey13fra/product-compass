@@ -9,8 +9,10 @@
 > 3. **A source outage no longer delists that source's roles** (the Stage 8 bug).
 > 4. **Every run is logged and visible** in `sync_runs` + the admin card.
 >
-> **Run status: 🟡 PARTIAL — code verified 2026-07-15; live steps blocked on the
-> user's manual setup (§0).** Sections a–b passed. Sections c–f pending.
+> **Run status: 🟢 code verified 2026-07-15; live verified 2026-07-16 against
+> production (`main` @ `3b0d565`).** Sections a–e and f1 passed. Open: f2–f3
+> (quick), and **f4 — the first unattended nightly cron**, which cannot be forced,
+> only waited for.
 
 ---
 
@@ -77,13 +79,18 @@ all 5 test suites green.
 
 ---
 
-## c. Live cron run ⬜ PENDING (needs §0)
+## c. Live cron run ✅ PASSED (2026-07-16, production)
 
-| # | Action | Expected |
-|---|--------|----------|
-| c1 | `curl` prod `/api/cron/ingest` with **no** header, then a **wrong** secret | `401` both |
-| c2 | `curl` prod with the **correct** secret | `200` + `{ run_id, added, updated, expired, bySource, errors, warnings }` |
-| c3 | `/roles` still lists ingested roles; badges intact | no regression |
+| # | Action | Expected | **Actual** |
+|---|--------|----------|-----------|
+| c1 | `curl` prod with **no** header, then a **wrong** secret | `401` both | ✅ both `401 {"error":"Unauthorized."}` |
+| c2 | `curl` prod with the **correct** secret | `200` + summary | ✅ `200` — `run_id a3a8847b`, `added 0, updated 71, expired 0`, all three sources `ok` |
+
+> **c1 also proved the Vercel env var** without anyone handling the secret. The
+> route returns `"Not configured."` when `CRON_SECRET` is unset and `"Unauthorized."`
+> only when a real comparison fails (`route.ts:23-29`). Production returned
+> `"Unauthorized."` → the secret **is** set in Vercel Production. Distinguishing
+> the two 401 bodies is the whole point of splitting those branches.
 
 ```powershell
 curl.exe -s -w "`nHTTP %{http_code}`n" https://product-compass-lilac.vercel.app/api/cron/ingest -H "Authorization: Bearer $env:CRON_SECRET"
@@ -94,14 +101,16 @@ curl.exe -s -w "`nHTTP %{http_code}`n" https://product-compass-lilac.vercel.app/
 Control + attack + app-path. **The control is what makes `[]` meaningful** — without
 it, `[]` could just mean "empty table" (the trap from `PAST_MISTAKES.md`).
 
-| # | Request (anon key, from PowerShell — **not** the SQL editor) | Expected |
-|---|---------|----------|
-| d1 | **CONTROL** `roles?select=id&limit=1` | rows → the key works |
-| d2 | **ATTACK** `sync_runs?select=*` | `[]` → invisible to the client |
-| d3 | **ATTACK** `roles` insert with the anon key | denied → RLS still the gate |
-| d4 | Confirm **no** `ingest_upsert_roles` RPC exists | 404 → we never shipped a public write RPC |
+**✅ PASSED (2026-07-16, live anon key from the terminal).**
 
-## e. The bug fix, live ⬜ PENDING — the most valuable check
+| # | Request (anon key, from the terminal — **not** the SQL editor) | Expected | **Actual** |
+|---|---------|----------|-----------|
+| d1 | **CONTROL** `roles?select=id&limit=1` | rows → the key works | ✅ `[{"id":"ff408af1-…"}]` `200` |
+| d2 | **ATTACK** `sync_runs?select=*` | `[]` → invisible to the client | ✅ `[]` — meaningful *because* d1 returned a row |
+| d3 | **ATTACK** `roles` insert with the anon key | denied → RLS still the gate | ✅ `401` `42501 new row violates row-level security policy for table "roles"` |
+| d4 | Confirm **no** `ingest_upsert_roles` RPC exists | 404 → no public write RPC | ✅ `404` |
+
+## e. The bug fix, live ✅ PASSED (2026-07-16) — the most valuable check
 
 Simulate a source outage and prove roles survive it:
 
@@ -115,14 +124,39 @@ the outage did **not** delist Adzuna's roles. Restore the key afterwards.
 *(Before this stage, that same outage would have flipped `is_live = false` on all
 ~44 Adzuna roles.)*
 
-## f. Logging + admin card ⬜ PENDING
+**Actual — the outage did not delist anything:**
 
-| # | Action | Expected |
-|---|--------|----------|
-| f1 | `/admin` as an admin | **Last sync** card: per-source `fetched`/`expired`, `ok` ticks, relative time, `cron` vs `manual` |
-| f2 | Click **Sync jobs now**, reload `/admin` | card updates, `trigger = manual` |
-| f3 | `select name, props from events where name = 'ingest_run' order by created_at desc;` | rows with `{trigger, added, updated, expired, sources_ok, sources_failed}`, **no PII** |
-| f4 | After the first nightly cron | a `trigger = 'cron'` row appears |
+```
+{"added":0,"updated":29,"expired":0,
+ "bySource":{"greenhouse":{"fetched":29,"ok":true},
+             "lever":{"fetched":0,"ok":true},
+             "adzuna":{"fetched":0,"ok":false}},
+ "errors":["adzuna: keys not configured"],
+ "warnings":["adzuna: fetch failed — expiry skipped (42 live rows kept)"]}
+```
+
+`sync_runs` agreed: `adzuna | 0 | false | 0 | {"adzuna: fetch failed — …"}`.
+Greenhouse expired 0 in the same run because all 29 of its roles came back — the
+skip is **per source**, not a global off-switch. Adzuna key restored afterwards;
+the next production run showed `adzuna 45 fetched, ok: true, expired 0`.
+
+> The `42` in the warning is Adzuna's `previouslyLive`, counted from the DB before
+> the expiry pass (`pipeline.ts:107-108`) — so the number in the warning and the
+> rows left on disk are the same population.
+
+## f. Logging + admin card 🟡 f1 PASSED · f2–f4 open
+
+| # | Action | Expected | **Actual** |
+|---|--------|----------|-----------|
+| f1 | `/admin` as an admin | **Last sync** card: per-source `fetched`/`expired`, `ok` ticks, relative time, `cron` vs `manual` | ✅ `2m ago · cron`, greenhouse 29/0, lever 0/0, adzuna 45/0, "0 added · 71 updated" — an exact match for run `a3a8847b`, i.e. the summary and the logged row agree |
+| f2 | Click **Sync jobs now**, reload `/admin` | card updates, `trigger = manual` | ⬜ not yet run |
+| f3 | `select name, props from events where name = 'ingest_run' order by created_at desc;` | rows with `{trigger, added, updated, expired, sources_ok, sources_failed}`, **no PII** | ⬜ not run |
+| f4 | After the first nightly cron | a `trigger = 'cron'` row appears | ⬜ **open** — waits for 03:00 UTC 2026-07-17 |
+
+> **f4 is the only claim still unproven, and it is the one that cannot be forced:**
+> every run so far was manually triggered. It proves *Vercel calls the endpoint*,
+> which is a different claim from *the endpoint works*. Check with:
+> `select trigger, run_at, source, fetched, ok from sync_runs order by run_at desc limit 5;`
 
 ---
 
