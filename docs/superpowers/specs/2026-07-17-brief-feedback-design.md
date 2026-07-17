@@ -99,9 +99,14 @@ create policy "brief_feedback read admin" on public.brief_feedback
 - `rate_brief(p_uid text, p_role text, p_mode text, p_rating text, p_note text)`
   → upsert on `(uid, role_id)`; sets rating/mode/note, stamps `updated_at`.
   Clears `note` when rating is `thumbs_up`.
-- `report_brief_used(p_uid text, p_role text, p_used boolean)`
+- `report_brief_used(p_uid text, p_role text, p_mode text, p_used boolean)`
   → upsert on `(uid, role_id)`; sets only `used_in_application` (leaves rating
   untouched, inserts with `rating = null` if no row exists).
+  > **Why `p_mode` is here** and not in the original 3-arg sketch: `brief_mode`
+  > is `not null`, and this function *inserts* whenever the user answers the
+  > apply prompt without ever having rated. It needs a mode to write. The caller
+  > passes `loadBrief(roleId)?.mode ?? "unknown"`. On conflict it does **not**
+  > overwrite an existing `brief_mode`.
 - `get_brief_feedback(p_uid text, p_role text)` → the single row, or none.
 
 Every function **requires** `p_uid` and filters by it. None accepts a "list all"
@@ -117,7 +122,7 @@ well as the check constraints — the RPC is the boundary.
 | `src/components/PositioningPanel.tsx` | pass mode at both call sites (`handlePositionLive` → `"live"`, `handleShowBrief` → `"manual"`); render `<BriefFeedback>` under `BriefView` |
 | `src/components/BriefFeedback.tsx` | **new** — thumbs up/down, note field on thumbs-down, shows the persisted rating on revisit (item 4) |
 | `src/components/ApplyButton.tsx` | after `setStatus(...,"applied")` succeeds, if `loadBrief(roleId)` exists → show the dismissible prompt. It already calls `loadBrief` for `had_brief`, so reuse that value rather than loading twice |
-| `src/components/ReferralApplyButton.tsx` | same prompt on the warm path — it fires the same `applied` event with the same `had_brief`, so leaving it out would silently under-count the warm path |
+| `src/components/ReferralApplyButton.tsx` | **no prompt — comment only.** Corrected during planning: this component calls `router.push("/referrals/<id>")` the instant the application succeeds (`:69`), so a prompt would unmount before it was seen. Covering the warm path means putting the question on `/referrals/[id]` — a different design, worth ~nothing today with **1** live referral role. `/admin/quality` must therefore label its usage rate **cold-path only**. `// TODO(v2)` |
 | `src/app/admin/quality/page.tsx` | **new** — admin-gated, reads `brief_feedback` directly (the `is_admin()` select policy) |
 
 **Source of truth is the DB, not localStorage.** Item 4 reads back through
