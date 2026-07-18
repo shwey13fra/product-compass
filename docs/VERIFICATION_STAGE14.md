@@ -15,9 +15,14 @@
 >    nothing except cross-reload durability.
 > 5. **No new PII** — `events`/`errors` still carry only ids/enums/booleans.
 >
-> **Run status: ⬜ NOT RUN.** Local `npm run build` passes (TypeScript + static
-> generation clean). Nothing below may be marked ✅ until its output appears here —
-> pasted by the user or returned by a tool call (PAST_MISTAKES 2026-07-16 rule).
+> **Run status: 🟡 PARTIALLY VERIFIED — RPC layer proven live.**
+> Migration is live. **§a isolation (three legs, anon key)** and **§b3 newest-wins**
+> PASSED against the real Supabase project (output recorded below). Local
+> `npm run build` passes (TypeScript + static generation clean). **Left:** UI /
+> sign-in flows on the deployed app — **§b1/b2** (anon sync + reload), **§c** (claim
+> + toast, needs a real sign-in), **§d** (anonymous regression), **§e** (no-PII).
+> Nothing may be marked ✅ from expectation — only from output pasted here or
+> returned by a tool call (PAST_MISTAKES 2026-07-16 rule).
 
 ---
 
@@ -37,7 +42,17 @@
 
 ---
 
-## a. Isolation — three legs ⬜ NOT RUN
+## a. Isolation — three legs ✅ PASSED (2026-07-18, anon key vs prod Supabase)
+
+**Observed output** (owner `verify-stage14-865710900`, run via curl with the anon key):
+- leg (c) app path — `upsert_experience` wrote and `get_experience` read back the row:
+  `[{"owner_key":"verify-stage14-865710900","payload":{"name":"V",…}}]`
+- leg (a) control — `roles?select=id&limit=1` → `[{"id":"d721d57a-…"}]` (anon key works).
+- leg (b) attack — `experience_profiles?owner_key=eq.<known>&select=*` → **`[]`** while
+  leg (c) proves that exact row EXISTS and is readable through the RPC. Deny-all RLS
+  confirmed — the empty array is denial, not an empty table.
+
+<details><summary>Repro (unchanged)</summary>
 
 **The control is what makes `[]` mean anything** (PAST_MISTAKES: an empty result
 only proves denial if you separately prove the rows exist). Run from a terminal,
@@ -64,13 +79,14 @@ Invoke-RestMethod -Method Post -Uri "$URL/rest/v1/rpc/get_experience" -Headers $
 Invoke-RestMethod -Method Get -Uri "$URL/rest/v1/experience_profiles?owner_key=eq.$OWNER&select=*" -Headers $H
 #   EXPECT: []  (deny-all RLS — the row exists per leg c, but the anon client cannot see it)
 ```
+</details>
 
-**Paste the three outputs here.** Pass = (a) returns 1, (b) returns `[]` for a row
-that (c) proved exists and can be read via the RPC. ⬜
+Pass criterion (met): (a) returns rows, (b) returns `[]` for a row that (c) proved
+exists and can be read via the RPC.
 
 ---
 
-## b. Anonymous sync + newest-wins ⬜ NOT RUN
+## b. Anonymous sync + newest-wins — b3 ✅ PASSED · b1/b2 ⬜ NOT RUN
 
 1. **Sync.** Fresh browser (or a new profile) on the prod URL → open a role →
    **My experience** → fill + Save. In the Supabase SQL editor:
@@ -84,7 +100,9 @@ that (c) proved exists and can be read via the RPC. ⬜
    Invoke-RestMethod -Method Post -Uri "$URL/rest/v1/rpc/upsert_experience" -Headers $H `
      -Body (@{ p_owner=$OWNER; p_payload=@{ version=1; name='STALE'; headline='h'; experience='old'; archetype=$null; updatedAt='2000-01-01T00:00:00.000Z' }; p_updated_at='2000-01-01T00:00:00.000Z' } | ConvertTo-Json -Depth 5)
    ```
-   → EXPECT the returned row still shows `name='V'` (the newer payload), not `STALE`. ⬜
+   → EXPECT the returned row still shows `name='V'` (the newer payload), not `STALE`.
+   ✅ **PASSED (2026-07-18):** the stale `2000-01-01` push returned
+   `[{…"name":"V"…"updated_at":"2026-07-18T14:32:45+00:00"}]` — the guard held.
 
 ---
 
