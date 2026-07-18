@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { Check, Loader2, CheckCircle2, ArrowRight, AlertTriangle } from "lucide-react";
-import { getCompassUid } from "@/lib/compass-uid";
+import { resolveOwnerKey } from "@/lib/owner";
 import {
   getApplication,
   setStatus,
@@ -28,15 +28,17 @@ export function ApplyButton({ roleId }: { roleId: string }) {
 
   useEffect(() => {
     let cancelled = false;
-    const uid = getCompassUid();
-    if (!uid) {
-      setMounted(true);
-      return;
-    }
-    getApplication(uid, roleId).then((res) => {
+    resolveOwnerKey().then((uid) => {
       if (cancelled) return;
-      if (res.ok && res.application) setStatusState(res.application.status);
-      setMounted(true);
+      if (!uid) {
+        setMounted(true);
+        return;
+      }
+      getApplication(uid, roleId).then((res) => {
+        if (cancelled) return;
+        if (res.ok && res.application) setStatusState(res.application.status);
+        setMounted(true);
+      });
     });
     return () => {
       cancelled = true;
@@ -44,7 +46,7 @@ export function ApplyButton({ roleId }: { roleId: string }) {
   }, [roleId]);
 
   async function markApplied() {
-    const uid = getCompassUid();
+    const uid = await resolveOwnerKey();
     if (!uid) return;
     setBusy(true);
     setError(null);

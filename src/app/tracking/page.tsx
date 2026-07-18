@@ -9,14 +9,18 @@ import {
   Loader2,
   ArrowLeft,
 } from "lucide-react";
-import { getCompassUid } from "@/lib/compass-uid";
+import { resolveOwnerKey } from "@/lib/owner";
 import { getApplicationsForOwner, type Application } from "@/lib/applications";
 import { getRolesByIds } from "@/lib/roles";
 import { loadExperience, type ExperienceProfile } from "@/lib/experience";
 import type { Role } from "@/lib/types";
 import { TrackingCard } from "@/components/TrackingCard";
 
-type Loaded = { applications: Application[]; rolesById: Map<string, Role> };
+type Loaded = {
+  applications: Application[];
+  rolesById: Map<string, Role>;
+  ownerKey: string;
+};
 type State =
   | { phase: "loading" }
   | { phase: "error"; message: string }
@@ -30,10 +34,15 @@ export default function TrackingPage() {
     let cancelled = false;
 
     async function load() {
-      const uid = getCompassUid();
+      const uid = await resolveOwnerKey();
+      if (cancelled) return;
       setProfile(loadExperience());
       if (!uid) {
-        if (!cancelled) setState({ phase: "ready", data: { applications: [], rolesById: new Map() } });
+        if (!cancelled)
+          setState({
+            phase: "ready",
+            data: { applications: [], rolesById: new Map(), ownerKey: "" },
+          });
         return;
       }
 
@@ -53,7 +62,10 @@ export default function TrackingPage() {
       }
 
       const rolesById = new Map(roles.roles.map((r) => [r.id, r]));
-      setState({ phase: "ready", data: { applications: apps.applications, rolesById } });
+      setState({
+        phase: "ready",
+        data: { applications: apps.applications, rolesById, ownerKey: uid },
+      });
     }
 
     load();
@@ -104,7 +116,6 @@ function ReadyState({
   data: Loaded;
   profile: ExperienceProfile | null;
 }) {
-  const uid = getCompassUid();
   // Applications already arrive newest-first; only show ones whose role resolved.
   const cards = data.applications
     .map((app) => ({ app, role: data.rolesById.get(app.role_id) }))
@@ -119,7 +130,7 @@ function ReadyState({
           key={app.id}
           role={role}
           application={app}
-          ownerKey={uid ?? app.owner_key}
+          ownerKey={data.ownerKey || app.owner_key}
           profile={profile}
         />
       ))}

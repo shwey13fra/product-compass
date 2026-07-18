@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { X } from "lucide-react";
-import { getCompassUid } from "@/lib/compass-uid";
+import { resolveOwnerKey } from "@/lib/owner";
 import { track } from "@/lib/analytics";
 import { reportBriefUsed, resolveBriefMode } from "@/lib/briefFeedback";
 
@@ -21,7 +21,7 @@ export function BriefUsedPrompt({
   const [busy, setBusy] = useState(false);
 
   async function answer(used: boolean) {
-    const uid = getCompassUid();
+    const uid = await resolveOwnerKey();
     if (!uid) return onDone();
     setBusy(true);
     await reportBriefUsed(uid, roleId, resolveBriefMode(mode), used);
