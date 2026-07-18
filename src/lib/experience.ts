@@ -49,3 +49,12 @@ export function saveExperience(p: ExperienceProfile): void {
   const next: ExperienceProfile = { ...p, version: 1, updatedAt: new Date().toISOString() };
   window.localStorage.setItem(KEY, JSON.stringify(next));
 }
+
+// Stage 14 — write a profile to localStorage WITHOUT re-stamping updatedAt.
+// Used when hydrating from the server (the remote copy already carries its own,
+// possibly-newer timestamp); re-stamping here would corrupt the newest-wins
+// comparison on the next reconcile. saveExperience() stays the door for user edits.
+export function writeExperienceRaw(p: ExperienceProfile): void {
+  if (typeof window === "undefined") return;
+  window.localStorage.setItem(KEY, JSON.stringify({ ...p, version: 1 }));
+}

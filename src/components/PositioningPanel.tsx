@@ -28,6 +28,8 @@ import {
   isExperienceReady,
   type ExperienceProfile,
 } from "@/lib/experience";
+import { scheduleExperiencePush } from "@/lib/experienceSync";
+import { resolveOwnerKey } from "@/lib/owner";
 import {
   buildPositioningPrompt,
   parseBrief,
@@ -74,10 +76,15 @@ export function PositioningPanel({ role }: { role: Role }) {
     setMounted(true);
   }, [role.id]);
 
-  function handleSaveExperience(p: ExperienceProfile) {
+  async function handleSaveExperience(p: ExperienceProfile) {
     saveExperience(p);
-    setProfile(p);
+    // saveExperience re-stamps updatedAt to now(); push the PERSISTED copy so the
+    // server timestamp matches what localStorage holds (newest-wins stays honest).
+    const saved = loadExperience() ?? p;
+    setProfile(saved);
     setEditing(false);
+    // Background, debounced — never blocks the UI; failures are swallowed.
+    scheduleExperiencePush(await resolveOwnerKey(), saved);
   }
 
   // LIVE: call the server route, which holds the key and returns a parsed brief.

@@ -3,6 +3,7 @@ import { Inter, Plus_Jakarta_Sans } from "next/font/google";
 import { Analytics } from "@vercel/analytics/next";
 import "./globals.css";
 import { APP_NAME } from "@/config";
+import { AppBoot } from "@/components/AppBoot";
 
 const inter = Inter({
   variable: "--font-inter",
@@ -34,6 +35,8 @@ export default function RootLayout({
     >
       <body className="min-h-full flex flex-col">
         {children}
+        {/* Stage 14 — experience sync + first-sign-in claim + one-time toast. */}
+        <AppBoot />
         {/* Vercel Analytics — free page-level traffic (no cookies, no PII). */}
         <Analytics />
       </body>

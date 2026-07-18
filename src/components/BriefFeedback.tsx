@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { ThumbsUp, ThumbsDown, Loader2, Check } from "lucide-react";
-import { getCompassUid } from "@/lib/compass-uid";
+import { resolveOwnerKey } from "@/lib/owner";
 import { track } from "@/lib/analytics";
 import {
   rateBrief,
@@ -35,12 +35,13 @@ export function BriefFeedback({
   // and a mirror would drift from what the admin sees.
   useEffect(() => {
     let cancelled = false;
-    const uid = getCompassUid();
-    if (!uid) return;
-    getBriefFeedback(uid, roleId).then((res) => {
-      if (cancelled || !res.ok || !res.data) return;
-      setRating(res.data.rating);
-      setNote(res.data.note ?? "");
+    resolveOwnerKey().then((uid) => {
+      if (cancelled || !uid) return;
+      getBriefFeedback(uid, roleId).then((res) => {
+        if (cancelled || !res.ok || !res.data) return;
+        setRating(res.data.rating);
+        setNote(res.data.note ?? "");
+      });
     });
     return () => {
       cancelled = true;
@@ -48,7 +49,7 @@ export function BriefFeedback({
   }, [roleId]);
 
   async function submit(next: BriefRating, withNote: string | null) {
-    const uid = getCompassUid();
+    const uid = await resolveOwnerKey();
     if (!uid) return;
     setBusy(true);
     setError(null);
