@@ -11,12 +11,17 @@
 // Validation 400s consume NEITHER (they return before any counter is touched).
 
 import { NextResponse } from "next/server";
-import { createClient } from "@supabase/supabase-js";
 import type { Role } from "@/lib/types";
 import type { ExperienceProfile } from "@/lib/experience";
 import { buildPositioningPrompt, parseBrief } from "@/lib/positioning";
 import { supabase } from "@/lib/supabase";
 import { logError } from "@/lib/errors";
+import {
+  clientIp,
+  resolveIdentityAndPlan,
+  planLimit,
+  FREE_BRIEFS_PER_MONTH,
+} from "@/lib/serverQuota";
 
 export const runtime = "nodejs"; // need process.env (not the edge runtime)
 export const dynamic = "force-dynamic";
@@ -26,42 +31,12 @@ const MODEL = "claude-haiku-4-5";
 const MAX_TOKENS = 1024; // the brief is small (4 short fields) — keep it tight
 const ANTHROPIC_URL = "https://api.anthropic.com/v1/messages";
 
-// Durable limits (config via server env). Monthly quota per identity; hourly cap
-// per IP as the rotation backstop.
-const MONTHLY_LIMIT = Number(process.env.AI_MONTHLY_LIMIT ?? 15);
+// Hourly per-IP backstop (catches compass_uid rotation). The MONTHLY cap is now
+// plan-based (Stage 16): free = FREE_BRIEFS_PER_MONTH, pro = unlimited. Identity +
+// plan resolution live in @/lib/serverQuota (plan is verified-token only — never spoofable).
 const IP_HOURLY_LIMIT = Number(process.env.AI_IP_HOURLY_LIMIT ?? 10);
 
 type Body = { role?: Partial<Role>; profile?: Partial<ExperienceProfile> };
-
-function clientIp(req: Request): string {
-  const fwd = req.headers.get("x-forwarded-for");
-  if (fwd) return fwd.split(",")[0].trim();
-  return (req.headers.get("x-real-ip") ?? "").trim();
-}
-
-// Identity for the monthly quota. Prefer the VERIFIED auth user id (so a
-// signed-in user can't be spoofed onto someone else's bucket); else the
-// compass_uid header; else fall back to the IP so metering always happens.
-async function resolveIdentity(req: Request, ip: string): Promise<string> {
-  const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
-  const anon = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
-  const auth = req.headers.get("authorization");
-  if (auth && /^bearer /i.test(auth) && url && anon) {
-    try {
-      const token = auth.slice(7).trim();
-      const scoped = createClient(url, anon, {
-        auth: { persistSession: false, autoRefreshToken: false },
-        global: { headers: { Authorization: `Bearer ${token}` } },
-      });
-      const { data } = await scoped.auth.getUser();
-      if (data.user?.id) return data.user.id;
-    } catch {
-      // fall through to the anonymous identity
-    }
-  }
-  const uid = req.headers.get("x-compass-uid")?.trim();
-  return uid || (ip ? `ip:${ip}` : "");
-}
 
 export async function POST(req: Request) {
   // --- validate input (400s consume NOTHING) -------------------------------
@@ -99,7 +74,8 @@ export async function POST(req: Request) {
   }
 
   const ip = clientIp(req);
-  const identity = await resolveIdentity(req, ip);
+  const { identity, plan } = await resolveIdentityAndPlan(req, ip);
+  const monthlyLimit = planLimit(plan); // -1 = unlimited (Pro)
 
   // --- IP rate backstop first (catches uid rotation before touching quota) --
   try {
@@ -131,7 +107,7 @@ export async function POST(req: Request) {
   try {
     const { data, error } = await supabase.rpc("increment_ai_usage", {
       p_identity: identity,
-      p_limit: MONTHLY_LIMIT,
+      p_limit: monthlyLimit,
     });
     if (error) {
       // Fail CLOSED: if we can't verify the quota, don't spend uncapped credit.
@@ -153,7 +129,8 @@ export async function POST(req: Request) {
         {
           ok: false,
           limitReached: true,
-          error: `You've used all ${MONTHLY_LIMIT} live positionings this month. The manual paste-in is free and unlimited — use that, or come back next month.`,
+          plan,
+          error: `You've used all ${FREE_BRIEFS_PER_MONTH} free briefs this month. Upgrade to Pro for unlimited live briefs, or use the manual paste-in (free) — or come back next month.`,
           callsRemaining: 0,
         },
         { status: 429 }
@@ -240,5 +217,5 @@ export async function POST(req: Request) {
     );
   }
 
-  return NextResponse.json({ ok: true, brief: parsed.brief, callsRemaining });
+  return NextResponse.json({ ok: true, brief: parsed.brief, callsRemaining, plan });
 }

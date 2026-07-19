@@ -12,6 +12,7 @@ import {
   MessageSquare,
   Inbox,
   RefreshCw,
+  Crown,
 } from "lucide-react";
 import { useUser, isAdminEmail } from "@/lib/auth";
 import { supabase } from "@/lib/supabase";
@@ -35,6 +36,7 @@ import {
   getMyReferralApplications,
   getProfileEmails,
   setReferralStatus,
+  setUserPlan,
   type ReferralApplication,
 } from "@/lib/referrals";
 import { getRolesByIds } from "@/lib/roles";
@@ -86,6 +88,7 @@ export default function AdminPage() {
             Brief quality →
           </Link>
           <SyncJobsPanel />
+          <PlansPanel />
           <PostReferralForm />
           <ReferralOverview />
         </div>
@@ -225,6 +228,98 @@ function SyncJobsPanel() {
       {/* Durable last-run summary — survives reloads and shows the nightly cron's
           results, not just a sync you triggered in this session. */}
       <LastSyncCard />
+    </section>
+  );
+}
+
+// --- Set a user's plan (Stage 16) --------------------------------------------
+
+function PlansPanel() {
+  const [email, setEmail] = useState("");
+  const [plan, setPlan] = useState<"free" | "pro">("pro");
+  const [state, setState] = useState<"idle" | "saving" | "ok" | "nouser" | "error">(
+    "idle"
+  );
+  const [error, setError] = useState<string | null>(null);
+
+  async function onSubmit(e: React.FormEvent) {
+    e.preventDefault();
+    setError(null);
+    setState("saving");
+    const res = await setUserPlan(email, plan);
+    if (!res.ok) {
+      setError(res.error);
+      setState("error");
+      return;
+    }
+    setState(res.data === 0 ? "nouser" : "ok");
+  }
+
+  return (
+    <section className="rounded-card border border-border bg-surface p-5 shadow-[var(--shadow-warm)] sm:p-6">
+      <h2 className="inline-flex items-center gap-2 font-heading text-lg font-bold text-ink">
+        <Crown className="h-4 w-4 text-primary" aria-hidden />
+        Plans
+      </h2>
+      <p className="mt-1 text-sm text-muted">
+        Set a user&apos;s plan. Pro = unlimited live briefs (still IP rate-limited).
+        The user must have signed in at least once so a profile exists.
+      </p>
+
+      <form onSubmit={onSubmit} className="mt-4 grid grid-cols-1 gap-4 sm:grid-cols-2">
+        <Field label="User email">
+          <input
+            className={inputCls}
+            type="email"
+            value={email}
+            onChange={(e) => setEmail(e.target.value)}
+            placeholder="user@example.com"
+          />
+        </Field>
+        <Field label="Plan">
+          <select
+            className={inputCls}
+            value={plan}
+            onChange={(e) => setPlan(e.target.value as "free" | "pro")}
+          >
+            <option value="pro">Pro (unlimited)</option>
+            <option value="free">Free (3 / month)</option>
+          </select>
+        </Field>
+
+        <div className="sm:col-span-2 flex flex-wrap items-center gap-3">
+          <button
+            type="submit"
+            disabled={state === "saving"}
+            className="inline-flex min-h-[44px] items-center gap-2 rounded-btn bg-primary px-5 text-sm font-semibold text-white transition-colors hover:bg-primary-hover disabled:opacity-60"
+          >
+            {state === "saving" ? (
+              <Loader2 className="h-4 w-4 animate-spin" aria-hidden />
+            ) : (
+              <Crown className="h-4 w-4" aria-hidden />
+            )}
+            Set plan
+          </button>
+          {state === "ok" ? (
+            <span className="inline-flex items-center gap-1.5 text-sm font-medium text-success">
+              <CheckCircle2 className="h-4 w-4" aria-hidden />
+              {email.trim().toLowerCase()} is now {plan}.
+            </span>
+          ) : null}
+          {state === "nouser" ? (
+            <span className="inline-flex items-center gap-1.5 text-sm font-medium text-accent">
+              <AlertTriangle className="h-4 w-4" aria-hidden />
+              No signed-in user with that email — ask them to sign in once, then retry.
+            </span>
+          ) : null}
+          {state === "error" && error ? (
+            <span className="inline-flex items-center gap-1.5 text-sm font-medium text-danger">
+              <AlertTriangle className="h-4 w-4" aria-hidden />
+              {error}
+            </span>
+          ) : null}
+        </div>
+      </form>
     </section>
   );
 }

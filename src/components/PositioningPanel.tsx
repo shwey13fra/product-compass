@@ -45,6 +45,11 @@ import { BriefFeedback } from "@/components/BriefFeedback";
 import { track } from "@/lib/analytics";
 import { getCompassUid } from "@/lib/compass-uid";
 import { supabase } from "@/lib/supabase";
+import {
+  QuotaIndicator,
+  UpgradePanel,
+  type QuotaState,
+} from "@/components/QuotaIndicator";
 
 // Stage 4 (LIVE + MANUAL): set up experience → "Position me" calls the
 // server-side route (which holds the Anthropic key) and auto-fills the brief.
@@ -64,8 +69,11 @@ export function PositioningPanel({ role }: { role: Role }) {
   // Live-call state.
   const [loading, setLoading] = useState(false);
   const [liveError, setLiveError] = useState<string | null>(null);
-  const [callsRemaining, setCallsRemaining] = useState<number | null>(null);
   const [reposing, setReposing] = useState(false); // re-open the action chooser
+
+  // Stage 16 — plan + monthly free-brief quota (fetched read-only; no credit spent).
+  const [quota, setQuota] = useState<QuotaState | null>(null);
+  const [showUpgrade, setShowUpgrade] = useState(false);
 
   // Load persisted state on mount (localStorage is client-only).
   useEffect(() => {
@@ -74,6 +82,32 @@ export function PositioningPanel({ role }: { role: Role }) {
     setStored(loadBrief(role.id));
     if (!isExperienceReady(p)) setEditing(true);
     setMounted(true);
+  }, [role.id]);
+
+  // Stage 16 — read the plan + remaining free briefs so the indicator can show
+  // BEFORE the first click. Read-only (never increments); failures are silent.
+  useEffect(() => {
+    let active = true;
+    (async () => {
+      try {
+        const headers: Record<string, string> = {};
+        const uid = getCompassUid();
+        if (uid) headers["x-compass-uid"] = uid;
+        const { data: sess } = await supabase.auth.getSession();
+        const token = sess.session?.access_token;
+        if (token) headers["Authorization"] = `Bearer ${token}`;
+        const res = await fetch("/api/quota", { headers });
+        if (!active || !res.ok) return;
+        const q = (await res.json()) as QuotaState;
+        setQuota(q);
+        if (q.plan === "free" && (q.remaining ?? 0) <= 0) setShowUpgrade(true);
+      } catch {
+        // Indicator just won't render — never blocks positioning.
+      }
+    })();
+    return () => {
+      active = false;
+    };
   }, [role.id]);
 
   async function handleSaveExperience(p: ExperienceProfile) {
@@ -112,9 +146,24 @@ export function PositioningPanel({ role }: { role: Role }) {
         brief?: Brief;
         error?: string;
         callsRemaining?: number;
+        limitReached?: boolean;
+        plan?: "free" | "pro";
       };
-      if (typeof data.callsRemaining === "number") setCallsRemaining(data.callsRemaining);
+      // Keep the quota indicator in sync. `callsRemaining` is server-authoritative
+      // for both success and limitReached (0), so drive `remaining` off it directly.
+      setQuota((prev) => {
+        const plan = data.plan ?? prev?.plan ?? "free";
+        if (plan === "pro") {
+          return { plan, limit: null, used: prev?.used ?? 0, remaining: null };
+        }
+        const remaining =
+          typeof data.callsRemaining === "number"
+            ? data.callsRemaining
+            : prev?.remaining ?? null;
+        return { plan, limit: prev?.limit ?? null, used: prev?.used ?? 0, remaining };
+      });
       if (!data.ok || !data.brief) {
+        if (data.limitReached) setShowUpgrade(true);
         setLiveError(data.error ?? "Positioning failed. Try the manual paste-in.");
         return;
       }
@@ -229,15 +278,28 @@ export function PositioningPanel({ role }: { role: Role }) {
             </div>
           )}
 
-          {/* Action chooser: live (default) or manual fallback */}
+          {/* Action chooser: live (default) or manual fallback. Stage 16 adds the
+              quota indicator and, when a free user is out of briefs, the upgrade panel. */}
           {showActions && (
-            <PositionActions
-              isRepose={!!stored}
-              liveError={liveError}
-              callsRemaining={callsRemaining}
-              onLive={handlePositionLive}
-              onManual={handleManual}
-            />
+            <div className="space-y-3">
+              {quota && <QuotaIndicator quota={quota} />}
+              {showUpgrade && quota?.plan === "free" ? (
+                <UpgradePanel
+                  plan="free"
+                  onManual={() => {
+                    setShowUpgrade(false);
+                    handleManual();
+                  }}
+                />
+              ) : (
+                <PositionActions
+                  isRepose={!!stored}
+                  liveError={liveError}
+                  onLive={handlePositionLive}
+                  onManual={handleManual}
+                />
+              )}
+            </div>
           )}
 
           {/* Manual prompt + paste-back workflow (Stage 3 fallback) */}
@@ -445,17 +507,14 @@ function FitReadView({ fit, role }: { fit: FitRead; role: Role }) {
 function PositionActions({
   isRepose,
   liveError,
-  callsRemaining,
   onLive,
   onManual,
 }: {
   isRepose: boolean;
   liveError: string | null;
-  callsRemaining: number | null;
   onLive: () => void;
   onManual: () => void;
 }) {
-  const lowOnCalls = callsRemaining != null && callsRemaining <= 3;
   return (
     <div className="space-y-3">
       {liveError && (
@@ -484,13 +543,6 @@ function PositionActions({
         </button>
       </div>
 
-      {lowOnCalls && (
-        <p className="text-xs font-medium text-accent">
-          {callsRemaining === 0
-            ? "Live positioning is used up this month — use the manual paste-in."
-            : `${callsRemaining} live ${callsRemaining === 1 ? "run" : "runs"} left this month.`}
-        </p>
-      )}
       <p className="text-xs text-muted">
         Live runs Claude server-side (your key never touches the browser). Manual
         paste-in works with zero credits.

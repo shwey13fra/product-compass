@@ -29,6 +29,8 @@ export type EventName =
   | "referral_thread_message" // { role_id }
   | "onboarding_completed"
   | "sign_in"
+  | "quota_exhausted" // { plan } — free user hit the monthly brief cap (upgrade panel shown)
+  | "upgrade_intent" // { plan } — clicked "I'm interested" on the Pro upgrade panel (WTP signal)
   | "notification_sent" // { kind: "status" | "comment", sent } — server-side, no PII
   | "ingest_run"; // { trigger, added, updated, expired, sources_ok, sources_failed }
 

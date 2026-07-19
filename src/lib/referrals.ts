@@ -307,6 +307,26 @@ export async function getProfileEmails(
   return map;
 }
 
+// --- Admin: set a user's plan (Stage 16) -------------------------------------
+// Calls the admin_set_plan RPC. Admin-only is enforced IN POSTGRES via is_admin()
+// (the RPC raises if the caller isn't an admin). Returns the number of profiles
+// updated: 0 means no signed-in user with that email (they must sign in once).
+export async function setUserPlan(
+  email: string,
+  plan: "free" | "pro"
+): Promise<Result<number>> {
+  const trimmed = email.trim().toLowerCase();
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(trimmed)) {
+    return { ok: false, error: "Enter a valid email address." };
+  }
+  const { data, error } = await supabase.rpc("admin_set_plan", {
+    p_email: trimmed,
+    p_plan: plan,
+  });
+  if (error) return { ok: false, error: error.message };
+  return { ok: true, data: (data as number) ?? 0 };
+}
+
 // --- Admin: create a referral role ------------------------------------------
 // Admin-only by RLS (roles insert requires is_admin()). is_referral forced true.
 
