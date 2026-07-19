@@ -110,20 +110,44 @@ export async function getReferralApplication(
   return { ok: true, data: (data as ReferralApplication) ?? null };
 }
 
-// Update status (referee, referrer, or admin per RLS). Re-stamps status_changed_at.
+// Update status (referee, referrer, or admin per RLS). Stage 15: goes through the
+// server route so an email can be sent to the other party; the route performs the
+// write with THIS user's forwarded token, so RLS enforcement is unchanged.
 export async function setReferralStatus(
   id: string,
   status: ApplicationStatus
 ): Promise<Result<ReferralApplication>> {
-  const now = new Date().toISOString();
-  const { data, error } = await supabase
-    .from("referral_applications")
-    .update({ status, status_changed_at: now, updated_at: now })
-    .eq("id", id)
-    .select(APP_COLUMNS)
-    .single();
-  if (error) return { ok: false, error: error.message };
-  return { ok: true, data: data as ReferralApplication };
+  return postReferralWrite<ReferralApplication>("/api/referrals/status", {
+    applicationId: id,
+    status,
+  });
+}
+
+// Shared: attach the session token and POST a referral write-route. Returns the
+// same Result shape the callers already handle.
+async function postReferralWrite<T>(
+  url: string,
+  payload: Record<string, unknown>
+): Promise<Result<T>> {
+  const { data: sess } = await supabase.auth.getSession();
+  const token = sess.session?.access_token;
+  if (!token) return { ok: false, error: "Please sign in again." };
+  try {
+    const res = await fetch(url, {
+      method: "POST",
+      headers: {
+        "content-type": "application/json",
+        Authorization: `Bearer ${token}`,
+      },
+      body: JSON.stringify(payload),
+    });
+    const json = (await res.json()) as { ok: boolean; data?: T; error?: string };
+    if (!res.ok || !json.ok || json.data === undefined)
+      return { ok: false, error: json.error ?? "Request failed." };
+    return { ok: true, data: json.data };
+  } catch {
+    return { ok: false, error: "Network error. Try again." };
+  }
 }
 
 // --- Comments (referee + referrer ONLY; admins are blocked by RLS) -----------
@@ -140,26 +164,22 @@ export async function getComments(
   return { ok: true, data: (data ?? []) as Comment[] };
 }
 
+// Stage 15: posts through the server route (which derives the author from the
+// verified token and emails the other party). authorId/authorEmail are no longer
+// sent by the client — the server is authoritative — but the signature is kept so
+// existing call sites don't change.
 export async function addComment(
   applicationId: string,
-  authorId: string,
-  authorEmail: string | null,
+  _authorId: string,
+  _authorEmail: string | null,
   body: string
 ): Promise<Result<Comment>> {
   const trimmed = body.trim();
   if (!trimmed) return { ok: false, error: "Comment can’t be empty." };
-  const { data, error } = await supabase
-    .from("comments")
-    .insert({
-      application_id: applicationId,
-      author_id: authorId,
-      author_email: authorEmail,
-      body: trimmed,
-    })
-    .select(COMMENT_COLUMNS)
-    .single();
-  if (error) return { ok: false, error: error.message };
-  return { ok: true, data: data as Comment };
+  return postReferralWrite<Comment>("/api/referrals/comment", {
+    applicationId,
+    body: trimmed,
+  });
 }
 
 // The viewer's relationship to an application, for labelling in the UI.

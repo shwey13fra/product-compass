@@ -5,7 +5,32 @@
 
 ---
 
-## ▶ CURRENT STATE (last updated: 2026-07-15, session 12 — Stage 11 verified + STAGE 12 BUILT on a branch)
+## ▶ CURRENT STATE (last updated: 2026-07-19 — Stage 14 DEPLOYED (partly verified), Stage 15 BUILT on branch)
+
+**Where we left off.** Stages 13 & 14 are merged + deployed to prod (`main`). **Stage 15 (Resend email notifications) is code-complete, builds green, committed on branch `stage15`, NOT merged/deployed.** The one blocker across everything: **email sign-in is broken on prod** (Supabase built-in email doesn't deliver) → blocks Stage 14 §c AND all Stage 15 verification.
+
+**STAGE 14 — experience sync + anonymous→auth data claim. DEPLOYED, partially verified.** Merged to `main` (merge `405ff9e`, docs `542c7bc`), live on prod.
+- Server copy of the experience profile with debounced background sync (localStorage stays source of truth; on-load newest-wins reconcile). One-time **claim on first sign-in** re-keys this device's anonymous `applications`/`brief_feedback`/`events`/`ai_usage`/`experience` onto the auth id + one-time toast "Your saved work has been linked to your account."
+- Architecture: new `resolveOwnerKey()` (`src/lib/owner.ts`) = auth id when signed in else compass_uid, threaded through the **data-ownership** callers only (tracking, ApplyButton, BriefFeedback, BriefUsedPrompt); analytics uid + AI-quota header stay compass_uid. `<AppBoot/>` in layout = one auth listener runs reconcile + claim. Migration `scripts/stage14-experience-sync-and-claim.sql` (experience_profiles deny-all RLS; get/upsert_experience newest-wins guard; claim_anonymous_data idempotent, ai_usage summed).
+- **Verified LIVE (in `docs/VERIFICATION_STAGE14.md`):** §a isolation (3-leg, anon key) + §b3 newest-wins guard PASSED against real Supabase. Build green.
+- **STILL ⬜ (blocked on sign-in):** §c claim+toast, §b1/b2 UI sync+reload, §d anonymous regression, §e no-PII. Inert test row `owner_key like 'verify-stage14-%'` can be deleted anytime.
+
+**STAGE 15 — Resend email notifications for referral threads. BUILT on branch `stage15`, NOT deployed.**
+- Built: migration `scripts/stage15-notifications.sql` (notification_prefs email-keyed + RLS own-row; notification_log deny-all; `resolve_notification` + `unsubscribe_by_token` RPCs). Routes `/api/referrals/status`, `/api/referrals/comment` (write with forwarded JWT → RLS, then fire-and-forget email), `/api/notifications/unsubscribe`. `lib/email.ts` (Resend, never-throws), `lib/emailTemplates.ts` (Warm-Clay inline HTML+text; status = no comment text, comment = includes body), `lib/referralNotify.ts` glue. Prefs toggle `lib/notificationPrefs.ts` + `AccountMenu.tsx` wired into `AuthNav`. Repointed `setReferralStatus`/`addComment` in `referrals.ts`. `notification_sent` event; `.env.example` + `resend` dep. Build green.
+- **Verification `docs/VERIFICATION_STAGE15.md` — ALL ⬜** (needs sign-in + Resend domain).
+
+**SIGN-IN FIX (gates everything) — `docs/SIGNIN_UNBLOCK.md`.** Root cause = deliverability (Supabase built-in email throttled/spam-filtered), NOT a code bug (`auth.ts` offers magic-link + OTP). Fix = Supabase Auth SMTP → Resend. **User chose test-mode (no domain):** make the Resend account with the SAME email you sign in with → API key → Supabase Auth SMTP (host `smtp.resend.com`:465, user `resend`, pass=key, sender `onboarding@resend.dev`) + redirect URL `https://product-compass-lilac.vercel.app/**`. Test mode delivers only to your own email → unblocks your sign-in + Stage 14 §c; full Stage 15 (email a 2nd person) needs a verified domain later.
+
+**NEXT UP (in order):**
+1. USER: do the sign-in fix (`docs/SIGNIN_UNBLOCK.md`); confirm sign-in works on prod.
+2. Verify Stage 14 §c + §b1/b2/§d/§e together.
+3. Stage 15: run `scripts/stage15-notifications.sql`; set `RESEND_API_KEY`/`RESEND_FROM`/`NEXT_PUBLIC_APP_URL` in Vercel; merge `stage15`→`main`; deploy; verify §a–§f (real counterparty email needs a verified domain). Stage 15 = "P1 complete."
+
+**Plan file (Stage 15, approved):** `C:\Users\shwet\.claude\plans\linked-whistling-cupcake.md`.
+
+---
+
+## ▶ PRIOR STATE (last updated: 2026-07-15, session 12 — Stage 11 verified + STAGE 12 BUILT on a branch)
 
 **STAGE 12 (daily cron ingestion) BUILT + build/unit-verified on branch `stage12-cron-ingestion` (7 commits, `cdcee7a`→`4915b29`). NOT merged, NOT deployed — blocked on user setup.** Spec `docs/superpowers/specs/2026-07-15-stage12-cron-ingestion-design.md` · plan `docs/superpowers/plans/2026-07-15-stage12-cron-ingestion.md` · verification `docs/VERIFICATION_STAGE12.md`.
 - **Branched deliberately** (every prior stage went straight to `main` → auto-deploy). Keeps Stage 12 off prod until the bot user + migration exist. Hobby crons only fire from **production**, so a preview branch can't trigger anything.

@@ -3,9 +3,10 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { LogIn, LogOut, Shield, Users } from "lucide-react";
-import { useUser, signOut, isAdminEmail } from "@/lib/auth";
+import { LogIn, Shield, Users } from "lucide-react";
+import { useUser, isAdminEmail } from "@/lib/auth";
 import { getUnread } from "@/lib/referrals";
+import { AccountMenu } from "@/components/AccountMenu";
 
 // Auth-aware nav controls. Drop into any page header. Signed out → "Sign in".
 // Signed in → email + Referrals (with unread dot) + Admin (if admin) + Sign out.
@@ -76,21 +77,7 @@ export function AuthNav() {
         </Link>
       ) : null}
 
-      <span
-        className="hidden max-w-[14ch] truncate px-2 text-xs text-muted sm:inline"
-        title={user.email ?? ""}
-      >
-        {user.email}
-      </span>
-
-      <button
-        type="button"
-        onClick={() => signOut()}
-        className="inline-flex min-h-[44px] items-center gap-1.5 rounded-btn px-3 text-sm font-semibold text-muted transition-colors hover:bg-surface hover:text-danger"
-      >
-        <LogOut className="h-4 w-4" aria-hidden />
-        <span className="hidden sm:inline">Sign out</span>
-      </button>
+      <AccountMenu email={user.email ?? ""} />
     </div>
   );
 }

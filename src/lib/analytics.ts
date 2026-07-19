@@ -29,6 +29,7 @@ export type EventName =
   | "referral_thread_message" // { role_id }
   | "onboarding_completed"
   | "sign_in"
+  | "notification_sent" // { kind: "status" | "comment", sent } — server-side, no PII
   | "ingest_run"; // { trigger, added, updated, expired, sources_ok, sources_failed }
 
 export function track(
