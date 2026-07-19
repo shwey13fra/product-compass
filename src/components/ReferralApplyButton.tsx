@@ -26,7 +26,15 @@ import { track } from "@/lib/analytics";
 // linking this referee to the role's tagged referrer (a private thread + status
 // strip). Signed out → prompt to sign in (returns here). Already applied → link
 // to the thread.
-export function ReferralApplyButton({ role }: { role: Role }) {
+export function ReferralApplyButton({
+  role,
+  surface,
+  rank,
+}: {
+  role: Role;
+  surface?: string;
+  rank?: number;
+}) {
   const { user, loading } = useUser();
   const router = useRouter();
   const [existing, setExisting] = useState<ReferralApplication | null>(null);
@@ -65,7 +73,12 @@ export function ReferralApplyButton({ role }: { role: Role }) {
       setBusy(false);
       return;
     }
-    track("applied", { role_id: role.id, had_brief: loadBrief(role.id) !== null });
+    track("applied", {
+      role_id: role.id,
+      had_brief: loadBrief(role.id) !== null,
+      surface: surface ?? "direct",
+      ...(rank != null ? { rank } : {}),
+    });
     // Stage 13: no "did you use the brief?" prompt on this path — we redirect to
     // the thread immediately (below), so a prompt would unmount before it was
     // seen. Covering the warm path means putting the question on /referrals/[id].

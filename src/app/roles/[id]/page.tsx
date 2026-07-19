@@ -17,6 +17,7 @@ import {
   FreshnessFlag,
   ReferralBadge,
   SourceBadge,
+  SampleNotice,
 } from "@/components/role-badges";
 import { PositioningPanel } from "@/components/PositioningPanel";
 import { TrackEvent } from "@/components/TrackEvent";
@@ -29,10 +30,18 @@ export const dynamic = "force-dynamic";
 
 export default async function RoleDetailPage({
   params,
+  searchParams,
 }: {
   params: Promise<{ id: string }>;
+  searchParams: Promise<{ from?: string; rank?: string }>;
 }) {
   const { id } = await params;
+  const sp = await searchParams;
+  // Stage 18 capture — the surface + rank the user arrived from (set on the card
+  // link). Default to "direct" for deep-links that skip the list.
+  const surface = sp.from === "top" || sp.from === "all" ? sp.from : "direct";
+  const rankNum = sp.rank ? Number(sp.rank) : NaN;
+  const rank = Number.isFinite(rankNum) ? rankNum : undefined;
   const result = await getRoleById(id);
 
   if (!result.ok && result.notFound) notFound();
@@ -58,7 +67,10 @@ export default async function RoleDetailPage({
 
   return (
     <main className="mx-auto w-full max-w-3xl flex-1 px-4 py-8 sm:px-6 sm:py-12">
-      <TrackEvent name="role_viewed" props={{ role_id: role.id }} />
+      <TrackEvent
+        name="role_viewed"
+        props={{ role_id: role.id, surface, ...(rank != null ? { rank } : {}) }}
+      />
       <BackLink />
 
       {/* Header */}
@@ -86,14 +98,22 @@ export default async function RoleDetailPage({
             the CTA sits BELOW the inline location, never beside it. */}
         <div>
           {role.is_referral ? (
-            <ReferralApplyButton role={role} />
+            <ReferralApplyButton role={role} surface={surface} rank={rank} />
           ) : role.apply_url ? (
-            <ApplyOutButton url={role.apply_url} source={sourceLabel(role.source)} />
+            <ApplyOutButton
+              url={role.apply_url}
+              source={sourceLabel(role.source)}
+              roleId={role.id}
+              surface={surface}
+              rank={rank}
+            />
           ) : (
-            <ApplyButton roleId={role.id} />
+            <ApplyButton roleId={role.id} surface={surface} rank={rank} />
           )}
         </div>
       </header>
+
+      <SampleNotice source={role.source} />
 
       {/* Real-PM score + signals */}
       <section

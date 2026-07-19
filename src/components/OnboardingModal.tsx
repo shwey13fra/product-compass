@@ -71,7 +71,9 @@ export function OnboardingModal({ initial, mode, onSave, onSkip }: Props) {
       location,
       genuineOnly,
     };
-    track("onboarding_completed");
+    // Stage 18 capture — record the derived/selected archetypes (enums, no PII) so
+    // we can later measure applied-role archetype vs stated preference server-side.
+    track("onboarding_completed", { archetypes: domains });
     onSave(prefs);
   };
 

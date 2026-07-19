@@ -13,6 +13,8 @@ import {
   Inbox,
   RefreshCw,
   Crown,
+  Archive,
+  FlaskConical,
 } from "lucide-react";
 import { useUser, isAdminEmail } from "@/lib/auth";
 import { supabase } from "@/lib/supabase";
@@ -39,7 +41,7 @@ import {
   setUserPlan,
   type ReferralApplication,
 } from "@/lib/referrals";
-import { getRolesByIds } from "@/lib/roles";
+import { getRolesByIds, getSampleCounts, setSampleRolesLive } from "@/lib/roles";
 
 export default function AdminPage() {
   const { user, loading } = useUser();
@@ -81,13 +83,22 @@ export default function AdminPage() {
         />
       ) : (
         <div className="mt-6 space-y-8">
-          <Link
-            href="/admin/quality"
-            className="inline-flex items-center gap-1.5 text-sm font-semibold text-primary transition-colors hover:text-primary-hover"
-          >
-            Brief quality →
-          </Link>
+          <div className="flex flex-wrap items-center gap-4">
+            <Link
+              href="/admin/quality"
+              className="inline-flex items-center gap-1.5 text-sm font-semibold text-primary transition-colors hover:text-primary-hover"
+            >
+              Brief quality →
+            </Link>
+            <Link
+              href="/admin/matching"
+              className="inline-flex items-center gap-1.5 text-sm font-semibold text-primary transition-colors hover:text-primary-hover"
+            >
+              Matching report →
+            </Link>
+          </div>
           <SyncJobsPanel />
+          <SampleRetirementPanel />
           <PlansPanel />
           <PostReferralForm />
           <ReferralOverview />
@@ -228,6 +239,121 @@ function SyncJobsPanel() {
       {/* Durable last-run summary — survives reloads and shows the nightly cron's
           results, not just a sync you triggered in this session. */}
       <LastSyncCard />
+    </section>
+  );
+}
+
+// --- Sample-role retirement (Stage 17.5) -------------------------------------
+
+const SAMPLE_ARCHIVE_THRESHOLD = 40;
+
+function SampleRetirementPanel() {
+  const [counts, setCounts] = useState<{
+    sampleTotal: number;
+    sampleLive: number;
+    liveIngested: number;
+  } | null>(null);
+  const [state, setState] = useState<"idle" | "working" | "error">("idle");
+  const [msg, setMsg] = useState<string | null>(null);
+
+  const load = useCallback(async () => {
+    setCounts(await getSampleCounts());
+  }, []);
+  useEffect(() => {
+    load();
+  }, [load]);
+
+  async function toggle(isLive: boolean) {
+    setState("working");
+    setMsg(null);
+    const res = await setSampleRolesLive(isLive);
+    if (!res.ok) {
+      setMsg(res.error);
+      setState("error");
+      return;
+    }
+    setMsg(
+      `${isLive ? "Restored" : "Archived"} ${res.count} sample ${res.count === 1 ? "role" : "roles"}.`
+    );
+    setState("idle");
+    await load();
+  }
+
+  const canArchive =
+    counts != null && counts.liveIngested >= SAMPLE_ARCHIVE_THRESHOLD && counts.sampleLive > 0;
+  const canRestore = counts != null && counts.sampleLive < counts.sampleTotal;
+
+  return (
+    <section className="rounded-card border border-border bg-surface p-5 shadow-[var(--shadow-warm)] sm:p-6">
+      <h2 className="inline-flex items-center gap-2 font-heading text-lg font-bold text-ink">
+        <FlaskConical className="h-4 w-4 text-accent" aria-hidden />
+        Sample roles
+      </h2>
+      <p className="mt-1 text-sm text-muted">
+        Illustrative seed roles. Archive them once enough live ingested roles exist
+        ({SAMPLE_ARCHIVE_THRESHOLD}+). Reversible.
+      </p>
+
+      {counts ? (
+        <p className="mt-3 text-sm text-ink">
+          Live ingested:{" "}
+          <span className="font-semibold">{counts.liveIngested}</span> · Sample live:{" "}
+          <span className="font-semibold">
+            {counts.sampleLive}/{counts.sampleTotal}
+          </span>
+        </p>
+      ) : (
+        <p className="mt-3 inline-flex items-center gap-2 text-sm text-muted">
+          <Loader2 className="h-4 w-4 animate-spin" aria-hidden />
+          Loading counts…
+        </p>
+      )}
+
+      <div className="mt-4 flex flex-wrap items-center gap-3">
+        <button
+          type="button"
+          onClick={() => toggle(false)}
+          disabled={!canArchive || state === "working"}
+          className="inline-flex min-h-[44px] items-center gap-2 rounded-btn bg-primary px-5 text-sm font-semibold text-white transition-colors hover:bg-primary-hover disabled:cursor-not-allowed disabled:opacity-50"
+        >
+          {state === "working" ? (
+            <Loader2 className="h-4 w-4 animate-spin" aria-hidden />
+          ) : (
+            <Archive className="h-4 w-4" aria-hidden />
+          )}
+          Archive sample roles
+        </button>
+        <button
+          type="button"
+          onClick={() => toggle(true)}
+          disabled={!canRestore || state === "working"}
+          className="inline-flex min-h-[44px] items-center gap-1.5 rounded-btn px-3 text-sm font-medium text-muted transition-colors hover:text-primary disabled:cursor-not-allowed disabled:opacity-50"
+        >
+          <RefreshCw className="h-4 w-4" aria-hidden />
+          Restore
+        </button>
+      </div>
+
+      {counts && !canArchive && counts.sampleLive > 0 ? (
+        <p className="mt-3 text-xs font-medium text-accent">
+          Archive unlocks at {SAMPLE_ARCHIVE_THRESHOLD} live ingested roles (currently{" "}
+          {counts.liveIngested}).
+        </p>
+      ) : null}
+      {msg ? (
+        <p
+          className={`mt-3 inline-flex items-center gap-1.5 text-sm font-medium ${
+            state === "error" ? "text-danger" : "text-success"
+          }`}
+        >
+          {state === "error" ? (
+            <AlertTriangle className="h-4 w-4" aria-hidden />
+          ) : (
+            <CheckCircle2 className="h-4 w-4" aria-hidden />
+          )}
+          {msg}
+        </p>
+      ) : null}
     </section>
   );
 }

@@ -15,10 +15,27 @@ import {
 // A single role as a clickable card. Whole card links to the detail view.
 // `match` is optional Stage 2.5 personalisation; when present we show the
 // fit tag + reason chip.
-export function RoleCard({ role, match }: { role: Role; match?: MatchResult }) {
+export function RoleCard({
+  role,
+  match,
+  surface,
+  rank,
+}: {
+  role: Role;
+  match?: MatchResult;
+  // Stage 18 capture — where this card sits: "top" matches vs "all" (view-all),
+  // and its 1-based rank. Threaded to the detail page so role_viewed/applied can
+  // attribute the surface + position the user acted from.
+  surface?: "top" | "all";
+  rank?: number;
+}) {
+  const href =
+    surface && rank != null
+      ? `/roles/${role.id}?from=${surface}&rank=${rank}`
+      : `/roles/${role.id}`;
   return (
     <Link
-      href={`/roles/${role.id}`}
+      href={href}
       className="group flex flex-col rounded-card border border-border bg-surface p-5 shadow-[var(--shadow-warm)] transition-all hover:border-primary/40 hover:shadow-[0_2px_4px_rgba(42,35,32,0.06),0_12px_28px_rgba(42,35,32,0.10)] focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/50"
     >
       {match && (

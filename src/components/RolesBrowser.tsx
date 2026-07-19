@@ -184,7 +184,7 @@ export function RolesBrowser({ roles }: { roles: Role[] }) {
         // Browse mode (no personalisation): one ranked grid.
         <>
           <p className="mb-4 text-sm text-muted">{countLabel(scored.length, archetype, hideDisguised)}</p>
-          <Grid items={scored} />
+          <Grid items={scored} surface="all" />
         </>
       ) : topMatches.length > 0 ? (
         // Personalised: top matches first, rest behind a toggle.
@@ -193,7 +193,7 @@ export function RolesBrowser({ roles }: { roles: Role[] }) {
             title="Top matches for you"
             subtitle={`${topMatches.length} ${topMatches.length === 1 ? "role" : "roles"} aligned to your preferences`}
           />
-          <Grid items={topMatches} />
+          <Grid items={topMatches} surface="top" />
 
           {rest.length > 0 && (
             <div className="mt-8">
@@ -208,7 +208,7 @@ export function RolesBrowser({ roles }: { roles: Role[] }) {
               {showAll && (
                 <div className="mt-5">
                   <SectionHeading title="Other roles" subtitle="Still ranked by your fit score" />
-                  <Grid items={rest} />
+                  <Grid items={rest} surface="all" />
                 </div>
               )}
             </div>
@@ -220,7 +220,7 @@ export function RolesBrowser({ roles }: { roles: Role[] }) {
           <div className="mb-4 rounded-card border border-info/30 bg-info-soft px-4 py-3 text-sm text-ink">
             No strong matches for these preferences yet — here&apos;s everything, ranked by your fit score.
           </div>
-          <Grid items={scored} />
+          <Grid items={scored} surface="all" />
         </>
       )}
 
@@ -237,11 +237,17 @@ export function RolesBrowser({ roles }: { roles: Role[] }) {
   );
 }
 
-function Grid({ items }: { items: Scored[] }) {
+function Grid({ items, surface }: { items: Scored[]; surface: "top" | "all" }) {
   return (
     <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
-      {items.map(({ role, match }) => (
-        <RoleCard key={role.id} role={role} match={match ?? undefined} />
+      {items.map(({ role, match }, i) => (
+        <RoleCard
+          key={role.id}
+          role={role}
+          match={match ?? undefined}
+          surface={surface}
+          rank={i + 1}
+        />
       ))}
     </div>
   );

@@ -17,17 +17,17 @@ import { getCompassUid } from "@/lib/compass-uid";
 // The closed set of events we track — a union type keeps instrumentation honest
 // and typo-proof (and stops "just one more" event noise from creeping in).
 export type EventName =
-  | "role_viewed"
+  | "role_viewed" // { role_id, surface: "top"|"all"|"direct", rank? } (Stage 18 capture)
   | "fit_read_shown"
   | "brief_generated" // { mode: "live" | "manual", role_id }
   | "brief_copied" // { role_id }
   | "brief_rated" // { role_id, mode, rating } — NEVER the note text (PII)
   | "brief_used_reported" // { role_id, used }
-  | "applied" // { role_id, had_brief: boolean }
+  | "applied" // { role_id, had_brief, surface: "top"|"all"|"direct", rank?, via? } (Stage 18)
   | "status_changed" // { from, to }
   | "nudge_shown" // { role_id }
   | "referral_thread_message" // { role_id }
-  | "onboarding_completed"
+  | "onboarding_completed" // { archetypes: Archetype[] } (Stage 18 capture — stated preference)
   | "sign_in"
   | "quota_exhausted" // { plan } — free user hit the monthly brief cap (upgrade panel shown)
   | "upgrade_intent" // { plan } — clicked "I'm interested" on the Pro upgrade panel (WTP signal)

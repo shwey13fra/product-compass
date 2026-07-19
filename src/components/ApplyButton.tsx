@@ -17,7 +17,15 @@ import { BriefUsedPrompt } from "@/components/BriefUsedPrompt";
 // Role-detail CTA: "Mark as Applied". Once applied, it flips to a confirmation
 // that links to /tracking (the strip + nudges live there). Persists to Supabase
 // keyed by compass_uid, so the state survives reloads.
-export function ApplyButton({ roleId }: { roleId: string }) {
+export function ApplyButton({
+  roleId,
+  surface,
+  rank,
+}: {
+  roleId: string;
+  surface?: string;
+  rank?: number;
+}) {
   const [mounted, setMounted] = useState(false);
   const [status, setStatusState] = useState<ApplicationStatus | null>(null);
   const [busy, setBusy] = useState(false);
@@ -57,7 +65,13 @@ export function ApplyButton({ roleId }: { roleId: string }) {
       setStatusState(res.application.status);
       const savedBrief = loadBrief(roleId);
       // had_brief powers "% of applications sent with a brief" (docs/METRICS.md).
-      track("applied", { role_id: roleId, had_brief: savedBrief !== null });
+      // surface/rank (Stage 18 capture) attribute which view + position it came from.
+      track("applied", {
+        role_id: roleId,
+        had_brief: savedBrief !== null,
+        surface: surface ?? "direct",
+        ...(rank != null ? { rank } : {}),
+      });
       // Stage 13: had_brief says a brief EXISTED; this asks whether it was USED.
       // The gap between those two numbers is the point of /admin/quality.
       if (savedBrief) setAskUsed(savedBrief);

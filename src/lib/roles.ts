@@ -59,6 +59,44 @@ export async function getRoleById(id: string): Promise<RoleResult> {
   return { ok: true, role: data as Role };
 }
 
+// Stage 17.5 — sample-retirement support. Counts drive the admin panel and gate
+// the archive action (enabled only when live ingested roles >= threshold).
+export async function getSampleCounts(): Promise<{
+  sampleTotal: number;
+  sampleLive: number;
+  liveIngested: number;
+}> {
+  const { data } = await supabase.from("roles").select("source,is_live");
+  let sampleTotal = 0;
+  let sampleLive = 0;
+  let liveIngested = 0;
+  (data ?? []).forEach((r: { source: string | null; is_live: boolean }) => {
+    if (r.source === "seed") {
+      sampleTotal++;
+      if (r.is_live) sampleLive++;
+    } else if (r.source && r.is_live) {
+      liveIngested++;
+    }
+  });
+  return { sampleTotal, sampleLive, liveIngested };
+}
+
+// Reversible archive/restore of the illustrative sample (source='seed') roles.
+// Admin-only via RLS (roles UPDATE requires is_admin()). NOTE: restore sets ALL
+// seed roles live, including any that were closed for other reasons — acceptable
+// for this demo affordance. Returns how many rows were updated.
+export async function setSampleRolesLive(
+  isLive: boolean
+): Promise<{ ok: true; count: number } | { ok: false; error: string }> {
+  const { data, error } = await supabase
+    .from("roles")
+    .update({ is_live: isLive })
+    .eq("source", "seed")
+    .select("id");
+  if (error) return { ok: false, error: error.message };
+  return { ok: true, count: data?.length ?? 0 };
+}
+
 // Stage 5 — "On Closed, suggest 3–4 similar live roles": same archetype, still
 // live, excluding the closed one, best real-PM score first. Works client-side
 // too (anon client). Failures degrade to an empty list — never blocks the card.

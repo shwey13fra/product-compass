@@ -1,4 +1,4 @@
-import { CheckCircle2, AlertTriangle, ShieldX, Clock, HelpCircle, UserCheck } from "lucide-react";
+import { CheckCircle2, AlertTriangle, ShieldX, Clock, HelpCircle, UserCheck, FlaskConical } from "lucide-react";
 import {
   archetypeLabel,
   getBand,
@@ -93,12 +93,44 @@ const SOURCE_META: Record<string, { label: string; cls: string }> = {
 };
 
 export function SourceBadge({ source }: { source: string | null }) {
+  // Stage 17.5 — sample (seed) roles get an UNMISSABLE badge, not the muted chip:
+  // honey tint + flask icon + ring + tooltip, so no one mistakes an illustrative
+  // role for a live opening.
+  if (source === "seed") return <SampleBadge />;
   const m = source ? SOURCE_META[source] : null;
   if (!m) return null;
   return (
     <span className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-semibold ${m.cls}`}>
       {m.label}
     </span>
+  );
+}
+
+export function SampleBadge() {
+  return (
+    <span
+      title="Illustrative role — not a live opening."
+      aria-label="Sample role — illustrative, not a live opening"
+      className="inline-flex items-center gap-1.5 rounded-full bg-accent-soft px-2.5 py-0.5 text-xs font-bold text-accent ring-1 ring-accent/40"
+    >
+      <FlaskConical className="h-3.5 w-3.5" aria-hidden />
+      Sample
+    </span>
+  );
+}
+
+// Stage 17.5 — full-width callout for the detail page. Renders only for samples.
+export function SampleNotice({ source }: { source: string | null }) {
+  if (source !== "seed") return null;
+  return (
+    <div className="mt-4 flex items-start gap-2.5 rounded-card border border-accent/40 bg-accent-soft px-4 py-3 text-sm text-ink">
+      <FlaskConical className="mt-0.5 h-4 w-4 shrink-0 text-accent" aria-hidden />
+      <p>
+        <span className="font-semibold">Illustrative sample role — not a live opening.</span>{" "}
+        It&apos;s here to show how Product Compass works. Try positioning against it,
+        but don&apos;t apply expecting a reply.
+      </p>
+    </div>
   );
 }
 
