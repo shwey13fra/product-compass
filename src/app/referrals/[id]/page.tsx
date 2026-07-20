@@ -23,6 +23,7 @@ import {
   markRead,
   viewerRole,
   allowedStatusesFor,
+  isDormant,
   type ReferralApplication,
   type Comment,
 } from "@/lib/referrals";
@@ -48,14 +49,31 @@ export default function ReferralThreadPage() {
   const isParticipant = role_ === "referee" || role_ === "referrer";
   const isAdminOnly = role_ === "admin";
 
-  const allowed = allowedStatusesFor(role_);
+  const dormant = app ? isDormant(app) : false;
+  const canAdminClose = isAdminOnly && dormant && app?.status !== "closed";
+
+  // Referee's strip is read-only (they use the Withdraw button); admin can click
+  // Close only when the thread is dormant. Mirrors set_referral_status() server-side.
+  const allowed: ApplicationStatus[] =
+    role_ === "admin"
+      ? canAdminClose
+        ? ["closed"]
+        : []
+      : role_ === "referee"
+        ? []
+        : allowedStatusesFor(role_);
+
   const statusHint =
     role_ === "referrer"
-      ? "You drive these updates — mark Seen, Shared with HM, or Shortlisted as things move. Either of you can Close."
+      ? "You drive these updates — mark Seen, Shared with HM, or Shortlisted as things move. Close it when it wraps."
       : role_ === "referee"
-        ? "The referrer updates progress here. You can mark Closed if you withdraw or move on."
+        ? "The referrer drives these stages. If you need to step away, withdraw below."
         : role_ === "admin"
-          ? "Admin override — you can set any stage."
+          ? app?.status === "closed"
+            ? "This referral is closed."
+            : dormant
+              ? "Inactive for 90+ days — you can close this thread as cleanup."
+              : "Admin view. You can only close a thread after 90 days of inactivity."
           : undefined;
 
   // Warm, role-aware nudge for an empty thread + a starter placeholder.
@@ -115,6 +133,15 @@ export default function ReferralThreadPage() {
       setError(res.error);
     }
     setBusy(false);
+  }
+
+  async function withdraw() {
+    if (!app) return;
+    const ok = window.confirm(
+      "Withdraw your application? This closes the referral for both of you."
+    );
+    if (!ok) return;
+    await changeStatus("closed");
   }
 
   async function postComment(body: string) {
@@ -188,7 +215,25 @@ export default function ReferralThreadPage() {
                 onChange={changeStatus}
                 allowed={allowed}
                 hint={statusHint}
+                closeConfirm={
+                  isAdminOnly
+                    ? "Close this referral? It’s been inactive for 90+ days and you won’t be able to re-open it."
+                    : undefined
+                }
               />
+              {role_ === "referee" && app.status !== "closed" ? (
+                <button
+                  type="button"
+                  onClick={withdraw}
+                  disabled={busy}
+                  className="mt-3 inline-flex min-h-[44px] items-center gap-1.5 rounded-btn border border-danger/40 bg-danger-soft px-4 text-sm font-semibold text-danger transition-colors hover:border-danger/60 disabled:opacity-50"
+                >
+                  {busy ? (
+                    <Loader2 className="h-4 w-4 animate-spin" aria-hidden />
+                  ) : null}
+                  Withdraw application
+                </button>
+              ) : null}
             </div>
           </section>
 

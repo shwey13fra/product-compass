@@ -197,8 +197,10 @@ export function viewerRole(
 }
 
 // Which statuses a given viewer may set. Referrer drives the pipeline (they have
-// the hiring-side visibility); referee can only withdraw (Closed); admin overrides
-// everything. UX guardrail only — RLS already gates who can touch the row at all.
+// the hiring-side visibility); referee can only withdraw (Closed); admin can only
+// close a dormant thread (see isDormant). This mirrors the server-side state
+// machine in set_referral_status() (scripts/stage19-referral-status-rules.sql) —
+// the RPC is the real enforcement; this only shapes the buttons.
 export function allowedStatusesFor(
   role: "referee" | "referrer" | "admin" | "none"
 ): ApplicationStatus[] {
@@ -208,10 +210,24 @@ export function allowedStatusesFor(
     case "referee":
       return ["closed"];
     case "admin":
-      return ["applied", "seen", "shared_with_hm", "shortlisted", "closed"];
+      return ["closed"];
     default:
       return [];
   }
+}
+
+// An admin may close a thread only after it has been dormant for 90+ days — no
+// status change AND no message. Mirrors the guard in set_referral_status() so the
+// UI never offers an action the server would reject. "Position filled" isn't
+// tracked, so dormancy is the enforceable proxy for "it's been >3 months".
+export function isDormant(app: ReferralApplication): boolean {
+  const NINETY_DAYS_MS = 90 * 24 * 60 * 60 * 1000;
+  const statusAt = new Date(app.status_changed_at).getTime();
+  const commentAt = app.last_comment_at
+    ? new Date(app.last_comment_at).getTime()
+    : 0;
+  const lastActivity = Math.max(statusAt, commentAt);
+  return Date.now() - lastActivity >= NINETY_DAYS_MS;
 }
 
 export function statusBadgeRole(

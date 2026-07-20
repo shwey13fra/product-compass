@@ -25,6 +25,7 @@ export function StatusStrip({
   onChange,
   allowed,
   hint,
+  closeConfirm,
 }: {
   status: ApplicationStatus;
   busy: boolean;
@@ -33,6 +34,9 @@ export function StatusStrip({
   // aren't clickable). Omit to allow all (the anonymous /tracking flow).
   allowed?: ApplicationStatus[];
   hint?: string;
+  // Custom confirm text for the Closed step. The default assumes you can re-open
+  // by picking another status; pass an override where you can't (e.g. admin).
+  closeConfirm?: string;
 }) {
   const currentIdx = statusIndex(status);
   const canSet = (s: ApplicationStatus) => !allowed || allowed.includes(s);
@@ -41,7 +45,8 @@ export function StatusStrip({
     if (busy || next === status || !canSet(next)) return;
     if (next === "closed") {
       const ok = window.confirm(
-        "Mark this application as Closed? You can still re-open it by picking another status."
+        closeConfirm ??
+          "Mark this application as Closed? You can still re-open it by picking another status."
       );
       if (!ok) return;
     }

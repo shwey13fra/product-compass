@@ -15,8 +15,6 @@ import { logError } from "@/lib/errors";
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
-const APP_COLUMNS =
-  "id,role_id,referee_id,referrer_email,status,status_changed_at,comment_count,last_comment_at,created_at,updated_at";
 const VALID: ApplicationStatus[] = [
   "applied",
   "seen",
@@ -48,16 +46,20 @@ export async function POST(req: Request) {
   if (!scoped)
     return NextResponse.json({ ok: false, error: "Server misconfigured." }, { status: 500 });
 
-  const now = new Date().toISOString();
-  const { data, error } = await scoped
-    .from("referral_applications")
-    .update({ status, status_changed_at: now, updated_at: now })
-    .eq("id", appId)
-    .select(APP_COLUMNS)
-    .single();
+  // Status changes go through set_referral_status (SECURITY DEFINER): it resolves
+  // the caller's role from their forwarded token and enforces the per-role state
+  // machine (referrer drives the pipeline; referee can only withdraw; admin can
+  // only close a 90-day-dormant thread). A violation is raised in Postgres and
+  // surfaced here as the user-facing message — real enforcement, not UI-only.
+  const { data, error } = await scoped.rpc("set_referral_status", {
+    p_app_id: appId,
+    p_status: status,
+  });
 
   if (error || !data) {
-    await logError("api/referrals/status", "update failed", { hasData: !!data });
+    await logError("api/referrals/status", "status change rejected", {
+      hasData: !!data,
+    });
     return NextResponse.json(
       { ok: false, error: error?.message ?? "Could not update status." },
       { status: 400 }
