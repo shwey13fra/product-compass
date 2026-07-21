@@ -5,7 +5,35 @@
 
 ---
 
-## ▶ CURRENT STATE (last updated: 2026-07-19 — Stage 14 DEPLOYED (partly verified), Stage 15 BUILT on branch)
+## ▶ CURRENT STATE (last updated: 2026-07-21 — Stages 15/16/17/18 DEPLOYED; Stage 19 shipped; sign-in works for own email; verification testing resumes tomorrow)
+
+**Where we left off.** Everything is on `main` and deployed to prod at **https://product-compass-two.vercel.app** (the old `product-compass-lilac` URL is **dead** — lost in a Vercel account-recovery issue; do not use it). `main` HEAD = **`dd2dd4f`**, local + origin in sync. **Email sign-in now WORKS** — but only delivers to the Resend account's own inbox (`shwetaswain13november@gmail.com`); the sandbox sender `onboarding@resend.dev` **cannot email anyone else** (e.g. `sabbyicon@gmail.com` fails). So Stage 15 two-party flows + emailing real users are **blocked on a verified Resend domain (TODO v3)**; everything else is testable with your own login.
+
+**SHIPPED TODAY (all merged to `main` + pushed):**
+- **Stage 19 — referral status rules, now server-enforced** (`b99f3fb`). The per-role rules were **UI-only**: the write path was a direct `UPDATE` gated by RLS that checked row ownership but **not the target status**, so a referee could POST `status:shortlisted` straight to PostgREST. Fix = new **`set_referral_status()` SECURITY DEFINER RPC** encoding the state machine + **dropped the permissive `ref_apps update` policy** (RPC is now the only write path). Rules: referrer drives Seen→Shared→Shortlisted→Closed · referee **Withdraw (Closed) only** · admin **Closed only, and only when dormant 90+ days** (no status change AND no message — the enforceable proxy for "filled >3 months"; "filled" isn't tracked). Participant beats admin (mirrors `viewerRole`). UI: referee Withdraw button + read-only strip, admin gated on dormancy, `StatusStrip` gained `closeConfirm`, `isDormant()` mirrors the server guard. Migration `scripts/stage19-referral-status-rules.sql` — **run AFTER deploy** (it removes the old path; deploy is already live, so safe now).
+- **Browse shows live-only + Roles nav link** (`dd2dd4f`) — **USER-VERIFIED working.** `getRoles()` now filters `is_live=true`, so an admin-archived sample **disappears** from `/roles` (still reachable by direct link + on `/tracking`, where "No longer live" is the right signal). Added a **"Roles"** link to `AuthNav` so signed-in users (esp. admins on `/admin`) can return to browse without typing the URL.
+- **`.env.example`** `NEXT_PUBLIC_APP_URL` → `product-compass-two.vercel.app` (`7448e52`).
+
+**DIAGNOSED (user-config, not code bugs):** the sign-in `{}` empty-error had two causes, in sequence — (1) the user was on a **Vercel preview URL** (`product-compass-…-building-wi-th-claude.vercel.app`), not the real domain, whose origin isn't allow-listed; (2) on the real domain, the **Resend sandbox only delivers to the account's own email**, so `sabbyicon@` failed while `shwetaswain13november@` works.
+
+**MIGRATIONS STILL TO RUN in Supabase** (user had run SQL through Stage 15 only; deploy is live so all three are safe now):
+1. `scripts/stage16-plans-and-quota.sql` (Stage 16 free/pro + quota)
+2. `scripts/stage18-matching-report.sql` (Stage 18 admin matching report)
+3. `scripts/stage19-referral-status-rules.sql` (Stage 19 status RPC + RLS lockdown)
+
+**ALSO PENDING CONFIG:** Supabase → Auth → URL Configuration → **Site URL still = the dead `product-compass-lilac.vercel.app`** → change to `product-compass-two.vercel.app` (Redirect URLs already include `product-compass-two.vercel.app/**` + `localhost:3000/**`). Confirm Vercel env vars are **Production-scoped**.
+
+**NEXT UP (tomorrow — verification testing; plain-English checklists were given in chat):**
+1. Run the 3 migrations above; fix the Supabase Site URL.
+2. Verify with your own email (no domain needed): **Stage 14** (experience saves+reload, claim-on-sign-in toast once, /tracking not empty, no repeat toast, anon flow unchanged) · **Stage 16** (3-of-3 counter → decrements → 4th blocked + Upgrade panel → "I'm interested" thank-you → admin sets Pro → unlimited → manual paste-in free at 0) · **Stage 17** (Sample badge on card+detail, admin Archive/Restore) · **Stage 18** (`/admin/matching` loads) · **Stage 19** (referrer advances stages, referee only Withdraw, admin Close gated on 90-day dormancy; malice check: referee POSTing `shortlisted` to the API is rejected by Postgres).
+3. **Blocked on verified domain (TODO v3):** Stage 15 two-party emails + emailing real users — decide whether to buy + verify a Resend domain (Cloudflare/Namecheap ~$10/yr → verify `mail.<domain>` → set `RESEND_FROM` + Supabase SMTP sender; no code change).
+4. Optional cleanup: stale `// TODO(v2): email notifications` at `referrals/[id]/page.tsx:274` (Stage 15 shipped it). Offered-but-not-done: `docs/VERIFICATION_STAGE16/17/18.md` checklists; `docs/PRD_STATUS.md` (the PRD feature inventory + V3 scope was delivered in chat).
+
+**KEY FACTS:** live URL `https://product-compass-two.vercel.app` (lilac dead) · admin emails `sabbyicon@gmail.com` + `shwetaswain13november@gmail.com` · Resend sender = `onboarding@resend.dev` sandbox (own inbox only) · `main` HEAD `dd2dd4f`.
+
+---
+
+## ▶ PRIOR STATE (last updated: 2026-07-19 — Stage 14 DEPLOYED (partly verified), Stage 15 BUILT on branch)
 
 **Where we left off.** Stages 13 & 14 are merged + deployed to prod (`main`). **Stage 15 (Resend email notifications) is code-complete, builds green, committed on branch `stage15`, NOT merged/deployed.** The one blocker across everything: **email sign-in is broken on prod** (Supabase built-in email doesn't deliver) → blocks Stage 14 §c AND all Stage 15 verification.
 
