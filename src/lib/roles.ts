@@ -16,6 +16,11 @@ export async function getRoles(): Promise<RolesResult> {
   const { data, error } = await supabase
     .from("roles")
     .select(ROLE_COLUMNS)
+    // Browse shows LIVE roles only — an archived/retired role (is_live=false,
+    // e.g. a sample an admin archived) drops out of browse but stays reachable
+    // by direct link (getRoleById) and on /tracking (getRolesByIds), where the
+    // "No longer live" badge is the right signal for a role you're following.
+    .eq("is_live", true)
     // Highest real-PM score first so the genuine roles lead.
     .order("real_pm_score", { ascending: false });
 

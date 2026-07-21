@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { LogIn, Shield, Users } from "lucide-react";
+import { LogIn, Shield, Users, Briefcase } from "lucide-react";
 import { useUser, isAdminEmail } from "@/lib/auth";
 import { getUnread } from "@/lib/referrals";
 import { AccountMenu } from "@/components/AccountMenu";
@@ -53,6 +53,14 @@ export function AuthNav() {
 
   return (
     <div className="flex items-center gap-1">
+      <Link
+        href="/roles"
+        className="inline-flex min-h-[44px] items-center gap-1.5 rounded-btn px-3 text-sm font-semibold text-muted transition-colors hover:bg-surface hover:text-primary"
+      >
+        <Briefcase className="h-4 w-4" aria-hidden />
+        Roles
+      </Link>
+
       <Link
         href="/referrals"
         className="relative inline-flex min-h-[44px] items-center gap-1.5 rounded-btn px-3 text-sm font-semibold text-muted transition-colors hover:bg-surface hover:text-primary"
